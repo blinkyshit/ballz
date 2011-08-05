@@ -51,11 +51,11 @@ void flash_led(void)
 {
     uint8_t i;
 
-    for(i = 0; i < 3; i++)
+    for(i = 0; i < 5; i++)
     {
-        sbi(PORTB, 5);
+        sbi(PORTD, 2);
         _delay_ms(100); 
-        cbi(PORTB, 5);
+        cbi(PORTD, 2);
         _delay_ms(100); 
     }
 }
@@ -77,7 +77,7 @@ uint8_t get_light_level(void)
 {
     uint8_t val, dummy;
 
-    DDRC |= (1 << PC1);
+    sbi(PORTB, 1);
     adc_setup();
 
     ADCSRA |= (1<<ADSC);
@@ -86,9 +86,8 @@ uint8_t get_light_level(void)
     val = ADCH;
     ADCSRA &= ~(1<<ADSC);
 
-    DDRC &= ~(1 << PC1);
     adc_shutdown();
-    dprintf("val: %d\n", val);
+    cbi(PORTB, 1);
 
     return val;
 }
@@ -102,13 +101,13 @@ uint8_t are_lights_on(void)
 
 void turn_lights_on(void)
 {
-    sbi(PORTB, 5);
+    sbi(PORTB, 3);
     light_state = 1;
 }
 
 void turn_lights_off(void)
 {
-    cbi(PORTB, 5);
+    cbi(PORTB, 3);
     light_state = 0;
 }
 
@@ -116,22 +115,24 @@ void turn_lights_off(void)
 
 int main(void)
 {
-    uint8_t  i, l, state = 0;
+    uint8_t  i, j, l, state = 0;
 
     serial_init();
     adc_setup();
     timer_setup();
 
-    // Pin A0 light sensor read
-    // Pin A1 (PC1) light sensor enable
-    // Pin 13 (PB5) is the on board LED
-    DDRB |= (1 << PB5);
+    // PA0: light sensor read
+    // PB1: light sensor enable
+    // PB3: the green LED on the breakout board. It indicates if lights should be on or not
+    // PD2: the red LED that shows the board is working by flashing 5 times
+    // PD3: the safety light ON/OFF switch
+    DDRB |= (1 << PB3) | (1 << PB1);
+    DDRD |= (1 << PD2) | (1 << PD3);
 
     turn_lights_off();
     flash_led();
 
     sei();
-    dprintf("master controller starting!\n");
 
     while(1)
     {
@@ -139,15 +140,38 @@ int main(void)
         if (l > LIGHT_THRESHOLD && are_lights_on())
         {
             turn_lights_off();
-            dprintf("state: %d\n", are_lights_on());
+            cbi(PORTD, 3);
         }
         if (l < LIGHT_THRESHOLD && !are_lights_on())
         {
-            turn_lights_off();
+            turn_lights_on();
         }
-        dprintf("l: %d, state: %d\n", l, are_lights_on());
-        for(i = 0; i < 10; i++)
-            _delay_ms(200);
+        if (!are_lights_on())
+        {
+            for(i = 0; i < 10; i++)
+               _delay_ms(100);
+            continue;
+        }
+        for(i = 0; i < 2; i++)
+        {
+            sbi(PORTD, 3);
+            _delay_ms(100);
+            cbi(PORTD, 3);
+            _delay_ms(100);
+
+            for(j = 0; j < 3; j++)
+            {
+                sbi(PORTD, 3);
+                _delay_ms(40);
+                cbi(PORTD, 3);
+                _delay_ms(40);
+            }
+
+            sbi(PORTD, 3);
+            _delay_ms(100);
+            cbi(PORTD, 3);
+            _delay_ms(100);
+        }
     }
 
 	return 0;
