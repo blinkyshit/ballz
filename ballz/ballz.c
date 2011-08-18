@@ -16,19 +16,14 @@
 
 #define ADC_START         0  
 #define ADC_Z             0
-#define ADC_X             1
-#define ADC_Y             2
+#define ADC_Y             1
+#define ADC_X             2
 #define ADC_END           3  
 
-#define WINDOW_SIZE       10
-
 #define MID_POINT   1.650
-#define MID_POINT_X 1.648
-#define MID_POINT_Y 1.691
-#define MID_POINT_Z 1.226
-//#define MID_POINT_X 1.5100 1.648
-//#define MID_POINT_Y 1.6075 1.691
-//#define MID_POINT_Z 1.6895 1.226
+#define MID_POINT_X 1.6375
+#define MID_POINT_Y 1.648
+#define MID_POINT_Z 1.222
 #define SENSITIVITY  .362 
 
 /* Accelerometer info: MMA7331L
@@ -39,6 +34,21 @@
     y 1.683
     z 1.285
 
+   Vcc A0 A1 A2 [unused]
+
+        Read   computed
+   A0-Z 1.238  1.297
+   A1-Y 1.550  1.550
+   A2-X 1.688  1.63
+
+   A0-Z 1.235  1.28     12% error
+   A1-Y 1.648  1.5675   22% error
+   A2-X 1.597  1.5675    8% error
+
+   A0-Z 1.222  1.28 
+   A1-Y 1.648  1.56
+   A2-X 1.690  1.6375 
+
 */
 
 typedef struct 
@@ -47,18 +57,17 @@ typedef struct
 } vector;
 
 // ADC globals
-volatile uint8_t adc_index = ADC_START;
-volatile vector  accel;
-volatile vector  accel_win[WINDOW_SIZE];
-volatile int8_t  win_count = 0, data_updated = 0;
+volatile uint8_t  adc_index = ADC_START;
+volatile uint16_t accel_x, accel_y, accel_z = 0;
+volatile int8_t   data_updated = 0;
 
 // clock globals
-//volatile uint32_t ticks = 0;
+volatile uint32_t ticks = 0;
 
-//ISR (TIMER0_OVF_vect)
-//{
-//    ticks++;
-//}
+ISR (TIMER0_OVF_vect)
+{
+    ticks++;
+}
 
 ISR (TIMER2_OVF_vect)
 {
@@ -79,35 +88,18 @@ ISR(ADC_vect)
 
     if (adc_index == ADC_X)
     {
-        accel_win[win_count].x = (float)((hi << 8) | low);
+        accel_x = (float)((hi << 8) | low);
     }
     else
     if (adc_index == ADC_Y)
     {
-        accel_win[win_count].y = (float)((hi << 8) | low);
+        accel_y = (float)((hi << 8) | low);
     }
     else
     if (adc_index == ADC_Z)
     {
-        accel_win[win_count++].z = (float)((hi << 8) | low);
-
-        if (win_count == WINDOW_SIZE)
-        {
-            uint8_t i;
-
-            accel.x = accel.y = accel.z = 0.0;
-            for(i = 0; i < WINDOW_SIZE; i++)
-            {
-                accel.x += accel_win[i].x;
-                accel.y += accel_win[i].y;
-                accel.z += accel_win[i].z;
-            }
-            accel.x /= WINDOW_SIZE;
-            accel.y /= WINDOW_SIZE;
-            accel.z /= WINDOW_SIZE;
-            data_updated++;
-            win_count = 0;
-        }
+        accel_z = (float)((hi << 8) | low);
+        data_updated++;
     }
 
     adc_index++;
@@ -115,10 +107,11 @@ ISR(ADC_vect)
         adc_index = ADC_START;
 }
 
-uint8_t get_accel(vector *v) //, float *t)
+uint8_t get_accel(vector *v, float *t)
 {
     uint8_t u;
-//    uint32_t temp;
+    uint16_t x, y, z;
+    uint32_t temp;
 
     cli();
     if (!data_updated)
@@ -127,15 +120,19 @@ uint8_t get_accel(vector *v) //, float *t)
         return 0;
     }
 
-    v->x = accel.x;
-    v->y = accel.y;
-    v->z = accel.z;
+    x = accel_x;
+    y = accel_y;
+    z = accel_z;
     u = data_updated;
     data_updated = 0;
-//    temp = ticks;
+    temp = ticks;
     sei();
 
-//    *t = (float)temp * .008192;
+    v->x = x;
+    v->y = y;
+    v->z = z;
+
+    *t = (float)temp * .008192;
     return u;
 }
 
@@ -175,9 +172,9 @@ void timer_setup(void)
 	TCNT2 = 0;
     TIMSK2 |= _BV(TOIE2);
 
-//    TCCR0B |= _BV(CS02);
-//	TCNT0 = 0;
-//    TIMSK0 |= _BV(TOIE0);
+    TCCR0B |= _BV(CS02);
+	TCNT0 = 0;
+    TIMSK0 |= _BV(TOIE0);
 }
 
 void flash_led(void)
@@ -223,7 +220,7 @@ void flash_led(void)
 int main(void)
 {
     vector a, v, g, n, last;
-    int8_t i, m_sign;
+    int i;
     float m, t;
 
     serial_init();
@@ -242,7 +239,7 @@ int main(void)
     {
         uint8_t updated; 
 
-        updated = get_accel(&a); //, &t);
+        updated = get_accel(&a, &t);
         if (!updated)
             continue;
 
@@ -252,16 +249,19 @@ int main(void)
         v.z = (a.z * 2.56 / 1024);
 
         // Convert from mV to g
-        g.x = (v.x - MID_POINT_X) / SENSITIVITY;
-        g.y = (v.y - MID_POINT_Y) / SENSITIVITY;
-        g.z = -((v.z - MID_POINT_Z) / SENSITIVITY);
+        g.x = (MID_POINT_X - v.x) / SENSITIVITY;
+        g.y = (MID_POINT_Y - v.y) / SENSITIVITY;
+        g.z = -((MID_POINT_Z - v.z) / SENSITIVITY);
+//        g.x = (v.x - MID_POINT_X) / SENSITIVITY;
+//        g.y = (v.y - MID_POINT_Y) / SENSITIVITY;
+//        g.z = -((v.z - MID_POINT_Z) / SENSITIVITY);
 
         // Calculate the magnitude of the vector
         m = sqrt((g.x * g.x) + (g.y * g.y) + (g.z * g.z));
 
         dprintf("r: %f, %f, %f\n", a.x, a.y, a.z);
-        //dprintf("v: %f, %f, %f\n\n", v.x, v.y, v.z);
-        //dprintf("g: %f, %f, %f |%f|\n", g.x, g.y, g.z, m);
+        dprintf("v: %f, %f, %f\n", v.x, v.y, v.z);
+        dprintf("g: %f, %f, %f |%f|\n\n", g.x, g.y, g.z, m);
 
         n.x = g.x / m;
         n.y = g.y / m;
@@ -273,7 +273,8 @@ int main(void)
         //dprintf("%f %f\n", t, n.x);
         //dprintf("%f, %f, %f\n", last.x - n.x, last.y - n.y, last.z - n.z);
         last.x = n.x; last.y = n.y; last.z = n.z;
-        //_delay_ms(10);
+        for(i = 0; i < 10; i++)
+        _delay_ms(100);
     }
 
 	return 0;
