@@ -26,6 +26,13 @@
 #define MID_POINT_Z 1.222
 #define SENSITIVITY  .362 
 
+// Each ADC step = this many volts
+#define ADC_SENS .0025
+
+#define X_OFFSET 655
+#define Y_OFFSET 627
+#define Z_OFFSET 511
+
 /* Accelerometer info: MMA7331L
 
    362mV/g output @ 3.3V
@@ -219,7 +226,7 @@ void flash_led(void)
 
 int main(void)
 {
-    vector a, v, g, n, last;
+    vector a, dg, n, last;
     int i;
     float m, t;
 
@@ -243,38 +250,17 @@ int main(void)
         if (!updated)
             continue;
 
-        // Convert from raw values to mV
-        v.x = (a.x * 2.56 / 1024);
-        v.y = (a.y * 2.56 / 1024);
-        v.z = (a.z * 2.56 / 1024);
+        dg.x = (a.x - X_OFFSET) * ADC_SENS * SENSITIVITY;
+        dg.y = (a.y - Y_OFFSET) * ADC_SENS * SENSITIVITY;
+        dg.z = (a.z - Z_OFFSET) * ADC_SENS * SENSITIVITY;
 
-        // Convert from mV to g
-        g.x = (MID_POINT_X - v.x) / SENSITIVITY;
-        g.y = (MID_POINT_Y - v.y) / SENSITIVITY;
-        g.z = -((MID_POINT_Z - v.z) / SENSITIVITY);
-//        g.x = (v.x - MID_POINT_X) / SENSITIVITY;
-//        g.y = (v.y - MID_POINT_Y) / SENSITIVITY;
-//        g.z = -((v.z - MID_POINT_Z) / SENSITIVITY);
+        //dprintf("r: %f, %f, %f\n", a.x, a.y, a.z);
+        //dprintf("v: %f, %f, %f\n", v.x, v.y, v.z);
+        //dprintf("g: %f, %f, %f |%f|\n\n", g.x, g.y, g.z, m);
+        dprintf("%f %f\n", t, dg.x);
 
-        // Calculate the magnitude of the vector
-        m = sqrt((g.x * g.x) + (g.y * g.y) + (g.z * g.z));
-
-        dprintf("r: %f, %f, %f\n", a.x, a.y, a.z);
-        dprintf("v: %f, %f, %f\n", v.x, v.y, v.z);
-        dprintf("g: %f, %f, %f |%f|\n\n", g.x, g.y, g.z, m);
-
-        n.x = g.x / m;
-        n.y = g.y / m;
-        n.z = g.z / m;
-        //dprintf("n: %f, %f, %f\n", n.x, n.y, n.z);
-        //dprintf("%f, %f, %f\n", n.x - GRAVITY_X, n.y - GRAVITY_Y, n.z - GRAVITY_Z);
-        //dprintf("%f\n", n.x - GRAVITY_X);
-        //dprintf("%f\n",  n.x);
-        //dprintf("%f %f\n", t, n.x);
-        //dprintf("%f, %f, %f\n", last.x - n.x, last.y - n.y, last.z - n.z);
-        last.x = n.x; last.y = n.y; last.z = n.z;
-        for(i = 0; i < 10; i++)
-        _delay_ms(100);
+//        for(i = 0; i < 10; i++)
+//        _delay_ms(100);
     }
 
 	return 0;
