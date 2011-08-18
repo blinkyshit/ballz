@@ -114,6 +114,14 @@ int main(void)
 
     while(1)
     {
+        set_color(0, 0x99, 0, 0x99);
+        _delay_ms(100);
+        set_color(0, 0xFF, 0xCC, 0);
+        _delay_ms(100);
+    }
+
+    while(1)
+    {
         for(i = 0; i < 255; i++)
         {
             set_color(0, i, 0, 0);

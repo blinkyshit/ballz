@@ -7,35 +7,35 @@
 #include <stdio.h>
 #include <avr/interrupt.h>
 
-#define BAUD 9600 
-#define BAUD_CONST (F_CPU / 16 / BAUD - 1)
+#define BAUD 38400
+#define UBBR (F_CPU / 16 / BAUD - 1)
 
-#define _UBRRH UBRRH
-#define _UBRRL UBRRL
-#define _UCSRB UCSRB
-#define _UCSRC UCSRC
-#define _TXEN  TXEN
-#define _RXEN  RXEN
-#define _RXC   RXC
-#define _USBS  USBS
-#define _UCSZ1 UCSZ1
-#define _UCSZ0 UCSZ0
-#define _UCSRA UCSRA
-#define _UDRE  UDRE
-#define _UDR   UDR 
+#define _UBRRH UBRR0H
+#define _UBRRL UBRR0L
+#define _UCSRB UCSR0B
+#define _UCSRC UCSR0C
+#define _TXEN  TXEN0
+#define _RXEN  RXEN0
+#define _RXC   RXC0
+#define _USBS  USBS0
+#define _UCSZ1 UCSZ01
+#define _UCSZ0 UCSZ00
+#define _UCSRA UCSR0A
+#define _UDRE  UDRE0
+#define _UDR   UDR0 
 
 // TODO: This section needs to be customized for each AVR chip.
 void serial_init(void)
 {
     // UART 0
     /*Set baud rate */ 
-    _UBRRH = (unsigned char)(BAUD_CONST>>8); 
-    _UBRRL = (unsigned char)BAUD_CONST; 
+    _UBRRH = (unsigned char)(UBBR>>8); 
+    _UBRRL = (unsigned char)UBBR; 
 
     /* Enable transmitter */ 
     _UCSRB = (1<<_TXEN)|(1<<_RXEN); 
     /* Set frame format: 8data, 1stop bit */ 
-    _UCSRC = (0<<_USBS)|(1<<_UCSZ0)|(1<<_UCSZ1); 
+    _UCSRC = (0<<_USBS)|(3<<_UCSZ0); 
 }
 
 void serial_tx(unsigned char ch)

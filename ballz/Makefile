@@ -1,10 +1,10 @@
 CC=avr-gcc
-CFLAGS=-g -Os -Wall -I../include -I../mixer -mcall-prologues -mmcu=atmega32 -DF_CPU=16000000U -Wl,-u,vfprintf -lprintf_flt
+CFLAGS=-g -Os -Wall -I../include -I../mixer -mcall-prologues -mmcu=atmega324a -DF_CPU=8000000U -Wl,-u,vfprintf -lprintf_flt
 OBJ2HEX=avr-objcopy 
 TARGET=ballz
 
 program: $(TARGET).hex 
-	sudo avrdude -p m32 -P usb -c avrispmkII -Uflash:w:$(TARGET).hex
+	sudo avrdude -p m324p -F -P usb -c avrispmkII -Uflash:w:$(TARGET).hex
 
 $(TARGET).hex: $(TARGET).obj
 	$(OBJ2HEX) -R .eeprom -O ihex $< $@
