@@ -1,5 +1,5 @@
 The firmware for the "Look at my Ballz!" Burning Man project.
 
 ballz -- contains the source code for each of the 15 balls
-master -- contains the source code for the master controller.
-pwm -- contains the source for a bitbang pwm scheme that can control 24 leds.
+master -- contains the source code for the master controller
+pwm -- contains the source for a bitbang pwm scheme that can control 24 leds
