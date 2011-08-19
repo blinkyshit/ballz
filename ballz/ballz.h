@@ -6,7 +6,7 @@ typedef struct
     float x, y, z;
 } vector;
 
-uint8_t get_accel(vector *v, float *t);
+uint8_t get_accel(vector *a, vector *da, float *t);
 
 // Bit manipulation macros
 #define sbi(a, b) ((a) |= 1 << (b))       //sets bit B in variable A

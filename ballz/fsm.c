@@ -5,11 +5,12 @@
 #include "ballz.h"
 #include "fsm.h"
 
-#define STATE_ZERO_POINT            0
-#define STATE_PERIOD_FINDER         1
-#define STATE_IDLE                  2
-#define STATE_PULL_UP               3
-#define STATE_SWINGING              4
+#define STATE_START              0
+#define STATE_ZERO_POINT         1
+#define STATE_PERIOD_FINDER      2
+#define STATE_IDLE               3
+#define STATE_PULL_UP            4
+#define STATE_SWINGING           5
 
 #define TRANSITION_NO_CHANGE     0
 #define TRANSITION_ZERO_POINT    1
@@ -45,230 +46,192 @@ Transition transition_table[NUM_TRANSITIONS] =
 #define NUM_PULL_UP_HISTORY_POINTS    16
 #define INITIAL_FALL_SLOPE_THRESHOLD  .1
 
-static vector last;
-static float  t, t_last_zero_cross = 0.0;
 
-void process_data_peaks(vector *v, float t)
+void process_data_peaks(vector *a, vector *da, float t)
 {
 }
 
-void process_zero_point(vector *v, float t)
+void process_data_zero_point(vector *a, vector *da, float t)
 {
 }
 
-void process_period_finder(vector *v, float t)
+void process_data_period_finder(vector *a, vector *da, float t)
 {
 }
 
-void process_data_idle(vector *v, float t)
+static float   t_last_zero_cross = 0.0;
+static uint8_t moveToPullUp = 0;
+static uint8_t moveToIdle = 0;
+void process_data_idle(vector *a, vector *da, float t)
+{
+    if ((a->y > 0.0 && a->y - da->y <= 0.0) || (a->y < 0.0 && a->y - da->y >= 0.0))
+        t_last_zero_cross = t;
+
+    if (t - t_last_zero_cross > PULL_UP_THRESHOLD_T && fabs(a->y) > PULL_UP_THRESHOLD_Y)
+        moveToPullUp = 1;
+
+}
+
+//float    history[NUM_PULL_UP_HISTORY_POINTS], avg;
+//uint8_t  count = 0, index = 0, i;
+void process_data_pull_up(vector *a, vector *da, float t)
+{
+    // If we're seeing zero crossings, then the ball is near idle again
+    if (t - t_last_zero_cross < PULL_UP_THRESHOLD_T)
+        moveToIdle = 1;
+
+    if (t - t_last_zero_cross > PULL_UP_THRESHOLD_T && fabs(a->y) > .2)
+    {
+        cbi(PORTC, 1);
+        sbi(PORTC, 2);
+        sbi(PORTC, 3);
+    }
+    if (t - t_last_zero_cross > 1.0 && fabs(a->y) > .4)
+    {
+        sbi(PORTC, 1);
+        cbi(PORTC, 2);
+        sbi(PORTC, 3);
+    }
+
+    // Calculate a short running average of the recent rates of change
+    // If a steep rate of change is discovered, transition to the
+    // initial free fall state.
+//    history[index++] = a.y;
+//    index %= NUM_PULL_UP_HISTORY_POINTS;
+//    count = min(count + 1, NUM_PULL_UP_HISTORY_POINTS);
+//
+//    if (count == NUM_PULL_UP_HISTORY_POINTS)
+//        dprintf("%f\n", fabs(history[index] - history[(index-1) % count]));
+}
+
+void process_data_swinging(vector *a, vector *da, float t)
 {
 }
 
-void process_data_pull_up(vector *v, float t)
-{
-}
-
-void process_data_swinging(vector *v, float t)
-{
-}
-
-uint8_t state_zero_point(void)
+uint8_t state_zero_point(uint8_t prev_state, float t)
 {
     return TRANSITION_PERIOD_FINDER;
 }
 
-uint8_t state_period_finder(void)
+uint8_t state_period_finder(uint8_t prev_state, float t)
 {
     return TRANSITION_SWINGING;
 }
 
-uint8_t state_idle(void)
+uint8_t state_idle(uint8_t prev_state, float t)
 {
-    vector a;
-    float t;
-
-    dprintf("state: idle\n");
-
-    // Turn on only the blue LED
-    sbi(PORTC, 1);
-    sbi(PORTC, 2);
-    cbi(PORTC, 3);
-    while(1)
+    if (prev_state != STATE_IDLE)
     {
-        uint8_t updated; 
-
-        updated = get_accel(&a, &t);
-        if (!updated)
-            continue;
-
-        if (t - t_last_zero_cross > PULL_UP_THRESHOLD_T && fabs(a.y) > PULL_UP_THRESHOLD_Y)
-        {
-            // Turn off blue LED and move to pull up
-            sbi(PORTC, 1);
-            sbi(PORTC, 2);
-            sbi(PORTC, 3);
-   
-            return TRANSITION_PULL_UP;
-        }
-
-        if ((a.y > 0.0 && last.y <= 0.0) || (a.y < 0.0 && last.y >= 0.0))
-            t_last_zero_cross = t;
-
-        last.x = a.x; last.y = a.y; last.z = a.z;
+        dprintf("State: idle\n");
+        // Turn on only the blue LED
+        sbi(PORTC, 1);
+        sbi(PORTC, 2);
+        cbi(PORTC, 3);
     }
-    return TRANSITION_PULL_UP;
+    if (moveToPullUp)
+    {
+        moveToPullUp = 0;
+        return TRANSITION_PULL_UP;
+    }
+
+//    if (t - t_last_oob > IDLE_THRESHOLD_T)
+//        break;
+
+    return TRANSITION_NO_CHANGE;
 }
 
-uint8_t state_pull_up(void)
+uint8_t state_pull_up(uint8_t prev_state, float t)
 {
-    vector   a;
-    float    t, history[NUM_PULL_UP_HISTORY_POINTS], avg;
-    uint8_t  count = 0, index = 0, i;
-
-    dprintf("state: pull up\n");
-    while(1)
+    if (prev_state != STATE_PULL_UP)
     {
-        uint8_t updated; 
-
-        updated = get_accel(&a, &t);
-        if (!updated)
-            continue;
-
-
-        // Calculate a short running average of the recent rates of change
-        // If a steep rate of change is discovered, transition to the
-        // initial free fall state.
-        history[index++] = a.y;
-        index %= NUM_PULL_UP_HISTORY_POINTS;
-        count = min(count + 1, NUM_PULL_UP_HISTORY_POINTS);
-    
-        if (count == NUM_PULL_UP_HISTORY_POINTS)
-            dprintf("%f\n", fabs(history[index] - history[(index-1) % count]));
-        if (count == NUM_PULL_UP_HISTORY_POINTS && 
-            fabs(history[index] - history[(index-1) % count] > INITIAL_FALL_SLOPE_THRESHOLD))
-        {
-            sbi(PORTC, 1);
-            sbi(PORTC, 2);
-            sbi(PORTC, 3);
-
-            return TRANSITION_SWINGING;
-        }
-
-        // If we're seeing zero crossings, then the ball is near idle again
-        if (t - t_last_zero_cross < PULL_UP_THRESHOLD_T)
-        {
-            sbi(PORTC, 1);
-            sbi(PORTC, 2);
-            sbi(PORTC, 3);
-
-            return TRANSITION_IDLE;
-        }
-        if (t - t_last_zero_cross > PULL_UP_THRESHOLD_T && fabs(a.y) > .2)
-        {
-            cbi(PORTC, 1);
-            sbi(PORTC, 2);
-            sbi(PORTC, 3);
-        }
-        if (t - t_last_zero_cross > 1.0 && fabs(a.y) > .4)
-        {
-            sbi(PORTC, 1);
-            cbi(PORTC, 2);
-            sbi(PORTC, 3);
-        }
-
-        if ((a.y > 0.0 && last.y <= 0.0) || (a.y < 0.0 && last.y >= 0.0))
-            t_last_zero_cross = t;
-
-        //_delay_ms(50);
-        last.x = a.x; last.y = a.y; last.z = a.z;
+        dprintf("State: pull up\n");
+        // Turn on only the red LED to start
+        cbi(PORTC, 1);
+        sbi(PORTC, 2);
+        sbi(PORTC, 3);
     }
 
+    if (moveToIdle)
+    {
+        // Turn off blue LED and move to pull up
+        moveToIdle = 0;
+        return TRANSITION_IDLE;
+    }
+
+#if 0
+
+    if (fabs(a.x) > IDLE_THRESHOLD || fabs(a.y) > IDLE_THRESHOLD || fabs(a.z) > IDLE_THRESHOLD)
+    {
+        t_last_oob = t;
+        dprintf("non idle: %f %f %f\n", t, fabs(a.y), fabs(a.z));
+    }
+    if (count == NUM_PULL_UP_HISTORY_POINTS && 
+        fabs(history[index] - history[(index-1) % count] > INITIAL_FALL_SLOPE_THRESHOLD))
+    {
+        sbi(PORTC, 1);
+        sbi(PORTC, 2);
+        sbi(PORTC, 3);
+
+        return TRANSITION_SWINGING;
+    }
+
+#endif
+    return TRANSITION_NO_CHANGE;
 }
 
-uint8_t state_swinging(void)
+uint8_t state_swinging(uint8_t prev_state, float t)
 {
-    vector a;
-    float t, t_last_oob = 0.0;
-
-    dprintf("state: swinging\n");
-    cbi(PORTC, 1);
-    sbi(PORTC, 2);
-    cbi(PORTC, 3);
-    while(1)
-    {
-        uint8_t updated; 
-
-        updated = get_accel(&a, &t);
-        if (!updated)
-            continue;
-
-        if (fabs(a.x) > IDLE_THRESHOLD || fabs(a.y) > IDLE_THRESHOLD || fabs(a.z) > IDLE_THRESHOLD)
-        {
-            t_last_oob = t;
-            dprintf("non idle: %f %f %f\n", t, fabs(a.y), fabs(a.z));
-        }
-
-        if (t - t_last_oob > IDLE_THRESHOLD_T)
-            break;
-
-        last.x = a.x; last.y = a.y; last.z = a.z;
-    }
-
-    sbi(PORTC, 1);
-    sbi(PORTC, 2);
-    sbi(PORTC, 3);
-
     return TRANSITION_IDLE;
 }
 
 void fsm_loop(void)
 {
-    vector  a;
-    float   t, t_last_oob = 0.0;
-    uint8_t state = STATE_IDLE;
-    uint8_t new_state = 0, trans, i;
+    vector  a, da;
+    float   t;
+    uint8_t state = STATE_ZERO_POINT;
+    uint8_t prev_state = STATE_START, trans = TRANSITION_NO_CHANGE, i;
 
-    last.x = last.y = last.z = 0.0;
-    t_last_zero_cross = 0.0;
+//    t_last_zero_cross = 0.0;
 
     while(1)
     {
         uint8_t updated; 
 
-        updated = get_accel(&a, &t);
+        updated = get_accel(&a, &da, &t);
         if (!updated)
             continue;
 
-        process_data_peaks(&a, t);
-        process_zero_point(&a, t);
-        process_period_finder(&a, t);
-        process_data_idle(&a, t);
-        process_data_pull_up(&a, t);
-        process_data_swinging(&a, t);
+        process_data_peaks(&a, &da, t);
+        process_data_zero_point(&a, &da, t);
+        process_data_period_finder(&a, &da, t);
+        process_data_idle(&a, &da, t);
+        process_data_pull_up(&a, &da, t);
+        process_data_swinging(&a, &da, t);
 
         switch(state)
         {
             case STATE_ZERO_POINT:
-                trans = state_zero_point();
+                trans = state_zero_point(prev_state, t);
                 break;
 
             case STATE_PERIOD_FINDER:
-                trans = state_period_finder();
+                trans = state_period_finder(prev_state, t);
                 break;
 
             case STATE_IDLE:
-                trans = state_idle();
+                trans = state_idle(prev_state, t);
                 break;
 
             case STATE_PULL_UP:
-                trans = state_pull_up();
+                trans = state_pull_up(prev_state, t);
                 break;
 
             case STATE_SWINGING:
-                trans = state_swinging();
+                trans = state_swinging(prev_state, t);
                 break;
         }
 
+        prev_state = state;
         if (trans == TRANSITION_NO_CHANGE)
             continue;
 
@@ -276,10 +239,9 @@ void fsm_loop(void)
         {
             if (transition_table[i].old_state == state && transition_table[i].transition == trans)
             {
-                new_state = transition_table[i].new_state;
+                state = transition_table[i].new_state;
                 break;
             }
         }
-        state = new_state;
     }
 }

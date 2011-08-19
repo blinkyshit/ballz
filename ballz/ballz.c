@@ -106,11 +106,12 @@ ISR(ADC_vect)
         adc_index = ADC_START;
 }
 
-uint8_t get_accel(vector *v, float *t)
+uint8_t get_accel(vector *a, vector *da, float *t)
 {
-    uint8_t u;
-    uint16_t x, y, z;
-    uint32_t temp;
+    uint8_t       u;
+    uint16_t      x, y, z;
+    uint32_t      temp;
+    static vector last = { 0.0, 0.0, 0.0 };
 
     cli();
     if (!data_updated)
@@ -127,9 +128,16 @@ uint8_t get_accel(vector *v, float *t)
     temp = ticks;
     sei();
 
-    v->x = ((float)x - X_OFFSET) * ADC_SENS / SENSITIVITY;
-    v->y = ((float)y - Y_OFFSET) * ADC_SENS / SENSITIVITY;
-    v->z = ((float)z - Z_OFFSET) * ADC_SENS / SENSITIVITY;
+    a->x = ((float)x - X_OFFSET) * ADC_SENS / SENSITIVITY;
+    a->y = ((float)y - Y_OFFSET) * ADC_SENS / SENSITIVITY;
+    a->z = ((float)z - Z_OFFSET) * ADC_SENS / SENSITIVITY;
+    da->x = a->x - last.x;
+    da->y = a->y - last.y;
+    da->z = a->z - last.z;
+
+    last.x = a->x;
+    last.y = a->y;
+    last.z = a->z;
 
     *t = (float)temp * .008192;
 
