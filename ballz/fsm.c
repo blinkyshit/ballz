@@ -5,15 +5,18 @@
 #include "ballz.h"
 #include "fsm.h"
 
-#define STATE_IDLE                  1
-#define STATE_PULL_UP               2
-#define STATE_INITIAL_FALL          3
+#define STATE_ZERO_POINT            0
+#define STATE_PERIOD_FINDER         1
+#define STATE_IDLE                  2
+#define STATE_PULL_UP               3
 #define STATE_SWINGING              4
 
-#define TRANSITION_PULL_UP       1
-#define TRANSITION_IDLE          2
-#define TRANSITION_INITIAL_FALL  3
-#define TRANSITION_SWINGING      4
+#define TRANSITION_NO_CHANGE     0
+#define TRANSITION_ZERO_POINT    1
+#define TRANSITION_PERIOD_FINDER 2
+#define TRANSITION_IDLE          3
+#define TRANSITION_PULL_UP       4
+#define TRANSITION_SWINGING      5
 
 typedef struct 
 {
@@ -22,30 +25,62 @@ typedef struct
     uint8_t new_state;
 } Transition;
 
-#define NUM_TRANSITIONS 5
+#define NUM_TRANSITIONS 7
 Transition transition_table[NUM_TRANSITIONS] = 
 {
+    { STATE_ZERO_POINT,            TRANSITION_PERIOD_FINDER,  STATE_PERIOD_FINDER         },
+    { STATE_PERIOD_FINDER,         TRANSITION_SWINGING,       STATE_SWINGING              },
+    { STATE_SWINGING,              TRANSITION_IDLE,           STATE_IDLE                  },
+    { STATE_IDLE,                  TRANSITION_ZERO_POINT,     STATE_ZERO_POINT            },
     { STATE_IDLE,                  TRANSITION_PULL_UP,        STATE_PULL_UP               },
-
-    { STATE_PULL_UP,               TRANSITION_INITIAL_FALL,   STATE_INITIAL_FALL          },
     { STATE_PULL_UP,               TRANSITION_IDLE    ,       STATE_IDLE                  },
-
-    { STATE_INITIAL_FALL,          TRANSITION_SWINGING,       STATE_SWINGING              },
-
-    { STATE_SWINGING,              TRANSITION_IDLE,           STATE_IDLE                  }
+    { STATE_PULL_UP,               TRANSITION_SWINGING,       STATE_SWINGING              }
 };
 
 #define PULL_UP_THRESHOLD_Y .2
 #define PULL_UP_THRESHOLD_T .5
+#define IDLE_THRESHOLD      .15
+#define IDLE_THRESHOLD_T    1.00 
+
+#define NUM_PULL_UP_HISTORY_POINTS    16
+#define INITIAL_FALL_SLOPE_THRESHOLD  .1
 
 static vector last;
 static float  t, t_last_zero_cross = 0.0;
 
-#define SENSITIVITY  .362  // V/g
-#define ADC_SENS .0025
-#define X_OFFSET 655
-#define Y_OFFSET 627
-#define Z_OFFSET 511
+void process_data_peaks(vector *v, float t)
+{
+}
+
+void process_zero_point(vector *v, float t)
+{
+}
+
+void process_period_finder(vector *v, float t)
+{
+}
+
+void process_data_idle(vector *v, float t)
+{
+}
+
+void process_data_pull_up(vector *v, float t)
+{
+}
+
+void process_data_swinging(vector *v, float t)
+{
+}
+
+uint8_t state_zero_point(void)
+{
+    return TRANSITION_PERIOD_FINDER;
+}
+
+uint8_t state_period_finder(void)
+{
+    return TRANSITION_SWINGING;
+}
 
 uint8_t state_idle(void)
 {
@@ -86,8 +121,9 @@ uint8_t state_idle(void)
 
 uint8_t state_pull_up(void)
 {
-    vector a;
-    float t;
+    vector   a;
+    float    t, history[NUM_PULL_UP_HISTORY_POINTS], avg;
+    uint8_t  count = 0, index = 0, i;
 
     dprintf("state: pull up\n");
     while(1)
@@ -98,7 +134,27 @@ uint8_t state_pull_up(void)
         if (!updated)
             continue;
 
-        // If we've seen a zero crossing in the last sec, turn off
+
+        // Calculate a short running average of the recent rates of change
+        // If a steep rate of change is discovered, transition to the
+        // initial free fall state.
+        history[index++] = a.y;
+        index %= NUM_PULL_UP_HISTORY_POINTS;
+        count = min(count + 1, NUM_PULL_UP_HISTORY_POINTS);
+    
+        if (count == NUM_PULL_UP_HISTORY_POINTS)
+            dprintf("%f\n", fabs(history[index] - history[(index-1) % count]));
+        if (count == NUM_PULL_UP_HISTORY_POINTS && 
+            fabs(history[index] - history[(index-1) % count] > INITIAL_FALL_SLOPE_THRESHOLD))
+        {
+            sbi(PORTC, 1);
+            sbi(PORTC, 2);
+            sbi(PORTC, 3);
+
+            return TRANSITION_SWINGING;
+        }
+
+        // If we're seeing zero crossings, then the ball is near idle again
         if (t - t_last_zero_cross < PULL_UP_THRESHOLD_T)
         {
             sbi(PORTC, 1);
@@ -127,22 +183,17 @@ uint8_t state_pull_up(void)
         last.x = a.x; last.y = a.y; last.z = a.z;
     }
 
-    return TRANSITION_INITIAL_FALL;
-}
-
-
-uint8_t state_initial_fall(void)
-{
-    dprintf("state: initial fall\n");
-    return TRANSITION_SWINGING;
 }
 
 uint8_t state_swinging(void)
 {
     vector a;
-    float t;
+    float t, t_last_oob = 0.0;
 
     dprintf("state: swinging\n");
+    cbi(PORTC, 1);
+    sbi(PORTC, 2);
+    cbi(PORTC, 3);
     while(1)
     {
         uint8_t updated; 
@@ -151,60 +202,60 @@ uint8_t state_swinging(void)
         if (!updated)
             continue;
 
-        // If we've seen a zero crossing in the last sec, turn off
-        if (t - t_last_zero_cross < PULL_UP_THRESHOLD_T)
+        if (fabs(a.x) > IDLE_THRESHOLD || fabs(a.y) > IDLE_THRESHOLD || fabs(a.z) > IDLE_THRESHOLD)
         {
-            sbi(PORTC, 1);
-            sbi(PORTC, 2);
-            sbi(PORTC, 3);
-
-            return TRANSITION_IDLE;
-        }
-        if (t - t_last_zero_cross > PULL_UP_THRESHOLD_T && fabs(a.y) > .2)
-        {
-            cbi(PORTC, 1);
-            sbi(PORTC, 2);
-            sbi(PORTC, 3);
-        }
-        if (t - t_last_zero_cross > 1.0 && fabs(a.y) > .4)
-        {
-            sbi(PORTC, 1);
-            cbi(PORTC, 2);
-            sbi(PORTC, 3);
+            t_last_oob = t;
+            dprintf("non idle: %f %f %f\n", t, fabs(a.y), fabs(a.z));
         }
 
-        if ((a.y > 0.0 && last.y <= 0.0) || (a.y < 0.0 && last.y >= 0.0))
-            t_last_zero_cross = t;
+        if (t - t_last_oob > IDLE_THRESHOLD_T)
+            break;
 
-        //_delay_ms(50);
         last.x = a.x; last.y = a.y; last.z = a.z;
     }
+
+    sbi(PORTC, 1);
+    sbi(PORTC, 2);
+    sbi(PORTC, 3);
 
     return TRANSITION_IDLE;
 }
 
 void fsm_loop(void)
 {
+    vector  a;
+    float   t, t_last_oob = 0.0;
     uint8_t state = STATE_IDLE;
     uint8_t new_state = 0, trans, i;
 
     last.x = last.y = last.z = 0.0;
     t_last_zero_cross = 0.0;
 
-    trans = state_idle();
-    for(;;)
+    while(1)
     {
-        for(i = 0; i < NUM_TRANSITIONS; i++)
-        {
-            if (transition_table[i].old_state == state && transition_table[i].transition == trans)
-            {
-                new_state = transition_table[i].new_state;
-                break;
-            }
-        }
+        uint8_t updated; 
 
-        switch(new_state)
+        updated = get_accel(&a, &t);
+        if (!updated)
+            continue;
+
+        process_data_peaks(&a, t);
+        process_zero_point(&a, t);
+        process_period_finder(&a, t);
+        process_data_idle(&a, t);
+        process_data_pull_up(&a, t);
+        process_data_swinging(&a, t);
+
+        switch(state)
         {
+            case STATE_ZERO_POINT:
+                trans = state_zero_point();
+                break;
+
+            case STATE_PERIOD_FINDER:
+                trans = state_period_finder();
+                break;
+
             case STATE_IDLE:
                 trans = state_idle();
                 break;
@@ -213,13 +264,21 @@ void fsm_loop(void)
                 trans = state_pull_up();
                 break;
 
-            case STATE_INITIAL_FALL:
-                trans = state_initial_fall();
-                break;
-
             case STATE_SWINGING:
                 trans = state_swinging();
                 break;
+        }
+
+        if (trans == TRANSITION_NO_CHANGE)
+            continue;
+
+        for(i = 0; i < NUM_TRANSITIONS; i++)
+        {
+            if (transition_table[i].old_state == state && transition_table[i].transition == trans)
+            {
+                new_state = transition_table[i].new_state;
+                break;
+            }
         }
         state = new_state;
     }

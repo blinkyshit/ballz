@@ -14,5 +14,6 @@ uint8_t get_accel(vector *v, float *t);
 #define tbi(a, b) ((a) ^= 1 << (b))       //toggles bit B in variable A
 
 #define max(a,b) ((a) > (b) ? (a) : (b))
+#define min(a,b) ((a) < (b) ? (a) : (b))
 
 #endif
