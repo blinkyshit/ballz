@@ -46,6 +46,13 @@ Transition transition_table[NUM_TRANSITIONS] =
 #define NUM_PULL_UP_HISTORY_POINTS    16
 #define INITIAL_FALL_SLOPE_THRESHOLD  .1
 
+int sign(float val)
+{
+    if (val > 0)
+    	return 1;
+    return -1;
+}
+
 // filter_reg is external storage for our filter state, order controls the strength, val is input
 float lowpass(float *filter_reg, int order, float val)
 {
@@ -62,8 +69,33 @@ void lowpassv(vector *lp_reg, int order, vector *v)
     v->z = lowpass( &lp_reg->z, order, v->z );
 }
 
+#define peaks_to_keep 6
+float peak_time[peaks_to_keep];
+unsigned char peak_counter;
+
 void process_data_peaks(vector *a, vector *da, float t)
 {
+    static float last_val = 0.0, last_deriv = 0.0;
+    static int looking = 0;
+    
+    // zero cross for position
+    if (sign(last_val) - sign(da->z))
+	looking = 1;
+
+    // check for zero cross of derivative (ie, a peak in position)
+    if (looking && (sign(last_deriv) - sign(da->z)))
+    {
+        int i;
+
+        looking = 0;
+        for (i = peaks_to_keep - 1; i > 0; i--)
+            peak_time[i] = peak_time[i - 1];
+        peak_time[0] = t;
+        peak_counter++;
+    }
+    
+    last_val = a->z;
+    last_deriv = da->z;
 }
 
 void process_data_zero_point(vector *a, vector *da, float t)
