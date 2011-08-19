@@ -46,6 +46,14 @@ Transition transition_table[NUM_TRANSITIONS] =
 #define NUM_PULL_UP_HISTORY_POINTS    16
 #define INITIAL_FALL_SLOPE_THRESHOLD  .1
 
+// filter_reg is external storage for our filter state, order controls the strength, val is input
+float lowpass(float *filter_reg, int order, float val)
+{
+    float filter_shift = 1 << order;
+    *filter_reg = *filter_reg - (*filter_reg / filter_shift) + val;
+    return *filter_reg / filter_shift;
+}
+
 
 void process_data_peaks(vector *a, vector *da, float t)
 {
