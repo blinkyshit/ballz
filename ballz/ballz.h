@@ -16,4 +16,6 @@ uint8_t get_accel(vector *a, vector *da, float *t);
 #define max(a,b) ((a) > (b) ? (a) : (b))
 #define min(a,b) ((a) < (b) ? (a) : (b))
 
+#define __unused    __attribute__((unused))
+
 #endif

@@ -102,8 +102,45 @@ void process_data_zero_point(vector *a, vector *da, float t)
 {
 }
 
-void process_data_period_finder(vector *a, vector *da, float t)
+// deviation tolerance is an empirical number 'proof by eyeball'
+#define         period_jitter_tolerance 0.1
+float           period_ball;
+unsigned char   period_data_valid;
+
+void process_data_period_finder(__unused vector *a, __unused vector *da, __unused float t)
 {
+    static unsigned char last_peak_counter = 0;
+    int i;
+    float deviation = 0.0;
+    static float period_reg = 0.0;
+
+    // Exit if there are no new peaks to process
+    if (last_peak_counter == peak_counter)
+        return;
+
+    last_peak_counter = peak_counter;
+
+    // compute the average of: difference of the differences: ([i]-[i+1]) - ([i+1]-[i+2]) 
+    for (i = 0; i < peaks_to_keep - 2; i++)
+        deviation += fabs(peak_time[i] - 2*peak_time[i+1] + peak_time[i+2]) / (peaks_to_keep-2);
+
+    if (deviation < period_jitter_tolerance)
+    {
+        period_ball = (peak_time[0] - peak_time[peaks_to_keep - 1]) / (peaks_to_keep - 1);
+        period_ball *= 4; 		 // Z axis peak to -peak occur twice as fast as x or y
+        if (period_reg < 0.1) 	 // first sample? Then prime the pump with our current value
+            period_reg = 2 * period_ball; // 2 = 1 << (filter order = 1) to adjust for final scaling
+        period_ball = lowpass(&period_reg, 1, period_ball);
+        period_data_valid = 1;
+    }
+    else
+    {
+        // we're being played with, reset our state
+        period_reg = 0.0;
+        // FIXME: We almost certainly don't want to do this, but leaving it in until
+        // I can talk with Rob.
+        period_data_valid = 0;
+    }
 }
 
 static float   t_last_zero_cross = 0.0;
