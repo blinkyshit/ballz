@@ -54,6 +54,13 @@ float lowpass(float *filter_reg, int order, float val)
     return *filter_reg / filter_shift;
 }
 
+// lowpass a 3-vector, overwrites v with the result
+void lowpassv(vector *lp_reg, int order, vector *v)
+{
+    v->x = lowpass( &lp_reg->x, order, v->x );
+    v->y = lowpass( &lp_reg->y, order, v->y );
+    v->z = lowpass( &lp_reg->z, order, v->z );
+}
 
 void process_data_peaks(vector *a, vector *da, float t)
 {
@@ -195,6 +202,7 @@ uint8_t state_swinging(uint8_t prev_state, float t)
 void fsm_loop(void)
 {
     vector  a, da;
+    vector  a_lp_reg = {0, 0, 0}, da_lp_reg = {0, 0, 0};
     float   t;
     uint8_t state = STATE_ZERO_POINT;
     uint8_t prev_state = STATE_START, trans = TRANSITION_NO_CHANGE, i;
@@ -208,6 +216,10 @@ void fsm_loop(void)
         updated = get_accel(&a, &da, &t);
         if (!updated)
             continue;
+
+        // Replace a and da with lowpass filtered versions of the same
+        lowpassv(&a_lp_reg, 3, &a);
+        lowpassv(&da_lp_reg, 3, &da);
 
         process_data_peaks(&a, &da, t);
         process_data_zero_point(&a, &da, t);
