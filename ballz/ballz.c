@@ -7,12 +7,9 @@
 #include <util/delay.h>
 
 #include "debug.h"
+#include "ballz.h"
+#include "fsm.h"
 
-// Bit manipulation macros
-#define sbi(a, b) ((a) |= 1 << (b))       //sets bit B in variable A
-#define cbi(a, b) ((a) &= ~(1 << (b)))    //clears bit B in variable A
-#define tbi(a, b) ((a) ^= 1 << (b))       //toggles bit B in variable A
-#define MAX(a,b) ((a) > (b) ? (a) : (b))
 
 #define ADC_START         0  
 #define ADC_Z             0
@@ -24,14 +21,14 @@
 #define MID_POINT_X 1.6375
 #define MID_POINT_Y 1.648
 #define MID_POINT_Z 1.222
-#define SENSITIVITY  .362 
+#define SENSITIVITY  .362  // V/g
 
 // Each ADC step = this many volts
 #define ADC_SENS .0025
 
-#define X_OFFSET 655
-#define Y_OFFSET 627
-#define Z_OFFSET 511
+#define X_OFFSET 660.0
+#define Y_OFFSET 627.0
+#define Z_OFFSET 535.0
 
 /* Accelerometer info: MMA7331L
 
@@ -57,11 +54,6 @@
    A2-X 1.690  1.6375 
 
 */
-
-typedef struct 
-{
-    float x, y, z;
-} vector;
 
 // ADC globals
 volatile uint8_t  adc_index = ADC_START;
@@ -135,14 +127,14 @@ uint8_t get_accel(vector *v, float *t)
     temp = ticks;
     sei();
 
-    v->x = x;
-    v->y = y;
-    v->z = z;
+    v->x = ((float)x - X_OFFSET) * ADC_SENS / SENSITIVITY;
+    v->y = ((float)y - Y_OFFSET) * ADC_SENS / SENSITIVITY;
+    v->z = ((float)z - Z_OFFSET) * ADC_SENS / SENSITIVITY;
 
     *t = (float)temp * .008192;
+
     return u;
 }
-
 
 void adc_setup(void)
 {
@@ -226,10 +218,6 @@ void flash_led(void)
 
 int main(void)
 {
-    vector a, dg, n, last;
-    int i;
-    float m, t;
-
     serial_init();
     adc_setup();
     timer_setup();
@@ -240,8 +228,11 @@ int main(void)
     DDRD |= (1 << PD0) | (1 << PD2) | (1 << PD3) | (1 << PD4) | (1 << PD5) | (1 << PD6) | (1 << PD7);
 
     flash_led();
-
     dprintf("look at my ballz!\n");
+
+    sei();
+    fsm_loop();
+#if 0
     while(1)
     {
         uint8_t updated; 
@@ -250,18 +241,9 @@ int main(void)
         if (!updated)
             continue;
 
-        dg.x = (a.x - X_OFFSET) * ADC_SENS * SENSITIVITY;
-        dg.y = (a.y - Y_OFFSET) * ADC_SENS * SENSITIVITY;
-        dg.z = (a.z - Z_OFFSET) * ADC_SENS * SENSITIVITY;
-
-        //dprintf("r: %f, %f, %f\n", a.x, a.y, a.z);
-        //dprintf("v: %f, %f, %f\n", v.x, v.y, v.z);
-        //dprintf("g: %f, %f, %f |%f|\n\n", g.x, g.y, g.z, m);
-        dprintf("%f %f\n", t, dg.x);
-
-//        for(i = 0; i < 10; i++)
-//        _delay_ms(100);
+        dprintf("%f %f %f\n", a.x, a.y, a.z);
+        _delay_ms(100);
     }
-
+#endif
 	return 0;
 }
