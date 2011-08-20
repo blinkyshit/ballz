@@ -68,6 +68,13 @@ void lowpassv(vector *lp_reg, int order, vector *v)
     v->z = lowpass( &lp_reg->z, order, v->z );
 }
 
+void subv(vector *a, vector *subtract)
+{
+    a->x -= subtract->x;
+    a->y -= subtract->y;
+    a->z -= subtract->z;
+}
+
 #define peaks_to_keep 6
 float peak_time[peaks_to_keep];
 unsigned char peak_counter;
@@ -301,8 +308,8 @@ uint8_t state_swinging(uint8_t prev_state, float t)
 
 void fsm_loop(void)
 {
-    vector  a, da;
-    vector  a_lp_reg = {0, 0, 0}, da_lp_reg = {0, 0, 0};
+    vector  a, da, a_dc, a_no_dc;
+    vector  a_lp_reg = {0, 0, 0}, da_lp_reg = {0, 0, 0}, a_dc_reg = {0, 0, 0};
     float   t;
     uint8_t state = STATE_ZERO_POINT;
     uint8_t prev_state = STATE_START, trans = TRANSITION_NO_CHANGE, i;
@@ -330,6 +337,17 @@ void fsm_loop(void)
         // Replace a and da with lowpass filtered versions of the same
         lowpassv(&a_lp_reg, 5, &a);
         lowpassv(&da_lp_reg, 5, &da);
+
+        a_no_dc = a;
+        // if we're past the initial pull back impulse, then try to find center of swinging
+        if (state == STATE_PERIOD_FINDER || state == STATE_SWINGING)
+        {
+            // Estimate the DC offset of a, then subtract that from a_no_dc to center the data
+            a_dc = a;
+            lowpassv(&a_dc_reg, 10, &a_dc);
+            subv(&a_no_dc, &a_dc);
+        }
+        
 //        dprintf("%f %f %f\n", t, a.y, da.y);
 
         process_data_peaks(STATE_SWINGING, &a, &da, t);
