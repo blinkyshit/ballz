@@ -30,7 +30,8 @@ typedef struct
 Transition transition_table[NUM_TRANSITIONS] = 
 {
     { STATE_ZERO_POINT,            TRANSITION_PERIOD_FINDER,  STATE_PERIOD_FINDER         },
-    { STATE_PERIOD_FINDER,         TRANSITION_SWINGING,       STATE_SWINGING              },
+    { STATE_PERIOD_FINDER,         TRANSITION_SWINGING,       STATE_IDLE              },
+//    { STATE_PERIOD_FINDER,         TRANSITION_SWINGING,       STATE_SWINGING              },
     { STATE_SWINGING,              TRANSITION_IDLE,           STATE_IDLE                  },
     { STATE_IDLE,                  TRANSITION_ZERO_POINT,     STATE_ZERO_POINT            },
     { STATE_IDLE,                  TRANSITION_PULL_UP,        STATE_PULL_UP               },
@@ -44,7 +45,7 @@ Transition transition_table[NUM_TRANSITIONS] =
 #define IDLE_THRESHOLD_T    1.00 
 
 #define NUM_PULL_UP_HISTORY_POINTS    16
-#define INITIAL_FALL_SLOPE_THRESHOLD  .1
+#define SWINGING_IDLE_ZERO_CROSSING_THRESHOLD_T .5
 
 int sign(float val)
 {
@@ -73,7 +74,7 @@ void lowpassv(vector *lp_reg, int order, vector *v)
 float peak_time[peaks_to_keep];
 unsigned char peak_counter;
 
-void process_data_peaks(vector *a, vector *da, float t)
+void process_data_peaks(uint8_t state, vector *a, vector *da, float t)
 {
     static float last_val = 0.0, last_deriv = 0.0;
     static int looking = 0;
@@ -98,7 +99,7 @@ void process_data_peaks(vector *a, vector *da, float t)
     last_deriv = da->z;
 }
 
-void process_data_zero_point(vector *a, vector *da, float t)
+void process_data_zero_point(uint8_t state, vector *a, vector *da, float t)
 {
 }
 
@@ -107,7 +108,7 @@ void process_data_zero_point(vector *a, vector *da, float t)
 float           period_ball;
 unsigned char   period_data_valid;
 
-void process_data_period_finder(__unused vector *a, __unused vector *da, __unused float t)
+void process_data_period_finder(uint8_t state, __unused vector *a, __unused vector *da, __unused float t)
 {
     static unsigned char last_peak_counter = 0;
     int i;
@@ -132,6 +133,7 @@ void process_data_period_finder(__unused vector *a, __unused vector *da, __unuse
             period_reg = 2 * period_ball; // 2 = 1 << (filter order = 1) to adjust for final scaling
         period_ball = lowpass(&period_reg, 1, period_ball);
         period_data_valid = 1;
+        //dprintf("%f %f %f\n", t, a->z, da->z);
     }
     else
     {
@@ -146,7 +148,8 @@ void process_data_period_finder(__unused vector *a, __unused vector *da, __unuse
 static float   t_last_zero_cross = 0.0;
 static uint8_t moveToPullUp = 0;
 static uint8_t moveToIdle = 0;
-void process_data_idle(vector *a, vector *da, float t)
+static uint8_t moveToSwinging = 0;
+void process_data_idle(uint8_t state, vector *a, vector *da, float t)
 {
     if ((a->y > 0.0 && a->y - da->y <= 0.0) || (a->y < 0.0 && a->y - da->y >= 0.0))
         t_last_zero_cross = t;
@@ -156,9 +159,7 @@ void process_data_idle(vector *a, vector *da, float t)
 
 }
 
-//float    history[NUM_PULL_UP_HISTORY_POINTS], avg;
-//uint8_t  count = 0, index = 0, i;
-void process_data_pull_up(vector *a, vector *da, float t)
+void process_data_pull_up(uint8_t state, vector *a, vector *da, float t)
 {
     // If we're seeing zero crossings, then the ball is near idle again
     if (t - t_last_zero_cross < PULL_UP_THRESHOLD_T)
@@ -176,19 +177,14 @@ void process_data_pull_up(vector *a, vector *da, float t)
         cbi(PORTC, 2);
         sbi(PORTC, 3);
     }
-
-    // Calculate a short running average of the recent rates of change
-    // If a steep rate of change is discovered, transition to the
-    // initial free fall state.
-//    history[index++] = a.y;
-//    index %= NUM_PULL_UP_HISTORY_POINTS;
-//    count = min(count + 1, NUM_PULL_UP_HISTORY_POINTS);
-//
-//    if (count == NUM_PULL_UP_HISTORY_POINTS)
-//        dprintf("%f\n", fabs(history[index] - history[(index-1) % count]));
+    if (fabs(da->y) > .25)
+    {
+        moveToSwinging = 1;
+        dprintf("da: %f\n", da->y);
+    }
 }
 
-void process_data_swinging(vector *a, vector *da, float t)
+void process_data_swinging(uint8_t state, vector *a, vector *da, float t)
 {
 }
 
@@ -241,6 +237,12 @@ uint8_t state_pull_up(uint8_t prev_state, float t)
         moveToIdle = 0;
         return TRANSITION_IDLE;
     }
+    if (moveToSwinging)
+    {
+        // Turn off blue LED and move to pull up
+        moveToSwinging = 0;
+        return TRANSITION_SWINGING;
+    }
 
 #if 0
 
@@ -265,7 +267,18 @@ uint8_t state_pull_up(uint8_t prev_state, float t)
 
 uint8_t state_swinging(uint8_t prev_state, float t)
 {
-    return TRANSITION_IDLE;
+    if (prev_state != STATE_SWINGING)
+    {
+        dprintf("State: swinging\n");
+        cbi(PORTC, 1);
+        sbi(PORTC, 2);
+        cbi(PORTC, 3);
+    }
+
+    if (t - t_last_zero_cross < SWINGING_IDLE_ZERO_CROSSING_THRESHOLD_T)
+        return TRANSITION_IDLE;
+
+    return TRANSITION_NO_CHANGE;
 }
 
 void fsm_loop(void)
@@ -290,12 +303,12 @@ void fsm_loop(void)
         lowpassv(&a_lp_reg, 3, &a);
         lowpassv(&da_lp_reg, 3, &da);
 
-        process_data_peaks(&a, &da, t);
-        process_data_zero_point(&a, &da, t);
-        process_data_period_finder(&a, &da, t);
-        process_data_idle(&a, &da, t);
-        process_data_pull_up(&a, &da, t);
-        process_data_swinging(&a, &da, t);
+        process_data_peaks(state, &a, &da, t);
+        process_data_zero_point(state, &a, &da, t);
+        process_data_period_finder(state, &a, &da, t);
+        process_data_idle(state, &a, &da, t);
+        process_data_pull_up(state, &a, &da, t);
+        process_data_swinging(state, &a, &da, t);
 
         switch(state)
         {
