@@ -78,23 +78,35 @@ void process_data_peaks(uint8_t state, vector *a, vector *da, float t)
 {
     static float last_val = 0.0, last_deriv = 0.0;
     static int looking = 0;
+    static float min = 0.0, max = 0.0, mid = 0.0;
     
-    // zero cross for position
-    if (sign(last_val) - sign(da->z))
-	looking = 1;
+    if (state != STATE_PERIOD_FINDER && state != STATE_SWINGING)
+        return;
+
+    // midpoint cross for position
+    if (sign(last_val - mid) - sign(a->z - mid))
+        looking = 1;
 
     // check for zero cross of derivative (ie, a peak in position)
-    if (looking && (sign(last_deriv) - sign(da->z)))
+    if (sign(last_deriv) - sign(da->z))
     {
-        int i;
+        if (last_deriv > da->z)
+            min = a->z;
+        else
+            max = a->z;
+        mid = (min+max)/2.0;
+        
+        if (looking)
+        {
+            int i;
 
-        looking = 0;
-        for (i = peaks_to_keep - 1; i > 0; i--)
-            peak_time[i] = peak_time[i - 1];
-        peak_time[0] = t;
-        peak_counter++;
+            looking = 0;
+            for (i = peaks_to_keep - 1; i > 0; i--)
+                peak_time[i] = peak_time[i - 1];
+            peak_time[0] = t;
+            peak_counter++;
+        }
     }
-    
     last_val = a->z;
     last_deriv = da->z;
 }
