@@ -40,9 +40,13 @@ Transition transition_table[NUM_TRANSITIONS] =
     { STATE_PULL_UP,               TRANSITION_SWINGING,       STATE_SWINGING              }
 };
 
+// The lowpass filter constants for our main data stream and for our DC offset removal
+#define LOWPASS_K           5
+#define LOWPASS_DC_FILTER_K 10
+
+// TODO: Document me
 #define PULL_UP_THRESHOLD_Y .2
 #define PULL_UP_THRESHOLD_T .5
-
 #define SWINGING_IDLE_ZERO_CROSSING_THRESHOLD_T .5
 
 int sign(float val)
@@ -152,7 +156,7 @@ void process_data_period_finder(uint8_t state, __unused vector *a, __unused vect
             period_reg = 2 * period_ball; // 2 = 1 << (filter order = 1) to adjust for final scaling
         period_ball = lowpass(&period_reg, 1, period_ball);
         period_data_valid = 1;
-        //dprintf("period: %f\n", period_ball);
+        //dprintf("period: %f (%f)\n", period_ball, deviation);
         //printf("%f %f %f %f\n", t, a->z, da->z, period_ball);
     }
     else
@@ -224,6 +228,13 @@ void process_data_pull_up(uint8_t state, vector *a, vector *da, float t)
 float last_non_idle_t = 0.0;
 void process_data_swinging(uint8_t state, vector *a, vector *da, float t)
 {
+    static float idle_check_reg = 0.0;
+    float        idle_check;
+    
+    idle_check = lowpass(&idle_check_reg, LOWPASS_K * 2, a->y * a->y);
+    if (idle_check < .0006)
+        moveToIdle = 1;
+
     if (fabs(a->y) > IDLE_ACCEL_Y || fabs(da->y) > IDLE_DERIV_Y)
         last_non_idle_t = t;
 }
@@ -294,11 +305,16 @@ uint8_t state_swinging(uint8_t prev_state, float t)
         cbi(PORTC, 3);
     }
 
-    if (t - last_non_idle_t > IDLE_THRESHOLD_T)
-        return TRANSITION_IDLE;
-    //if (t - t_last_deriv_zero_cross < PULL_UP_THRESHOLD_T)
+    //if (t - last_non_idle_t > IDLE_THRESHOLD_T)
     //    return TRANSITION_IDLE;
+//    if (t - t_last_zero_cross < PULL_UP_THRESHOLD_T)
+//        return TRANSITION_IDLE;
 
+    if (moveToIdle)
+    {
+        moveToIdle = 0;
+        return TRANSITION_IDLE;
+    }
     if (moveToPullUp)
     {
         moveToPullUp = 0;
@@ -337,8 +353,8 @@ void fsm_loop(void)
 //        dprintf("%f %f %f\n", t, a.z, da.z);
 
         // Replace a and da with lowpass filtered versions of the same
-        lowpassv(&a_lp_reg, 5, &a);
-        lowpassv(&da_lp_reg, 5, &da);
+        lowpassv(&a_lp_reg, LOWPASS_K, &a);
+        lowpassv(&da_lp_reg, LOWPASS_K, &da);
 
         a_no_dc = a;
         // if we're past the initial pull back impulse, then try to find center of swinging
@@ -346,7 +362,7 @@ void fsm_loop(void)
         {
             // Estimate the DC offset of a, then subtract that from a_no_dc to center the data
             a_dc = a;
-            lowpassv(&a_dc_reg, 10, &a_dc);
+            lowpassv(&a_dc_reg, LOWPASS_DC_FILTER_K, &a_dc);
             subv(&a_no_dc, &a_dc);
         }
         
