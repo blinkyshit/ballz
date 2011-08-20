@@ -7,6 +7,7 @@ typedef struct
 } vector;
 
 uint8_t get_accel(vector *a, vector *da, float *t);
+void save_period(float);
 
 // Bit manipulation macros
 #define sbi(a, b) ((a) |= 1 << (b))       //sets bit B in variable A

@@ -152,6 +152,7 @@ void process_data_period_finder(uint8_t state, __unused vector *a, __unused vect
             period_reg = 2 * period_ball; // 2 = 1 << (filter order = 1) to adjust for final scaling
         period_ball = lowpass(&period_reg, 1, period_ball);
         period_data_valid = 1;
+        save_period(period_ball);
         //dprintf("period: %f\n", period_ball);
         //printf("%f %f %f %f\n", t, a->z, da->z, period_ball);
     }
