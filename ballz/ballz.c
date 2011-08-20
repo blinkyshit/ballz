@@ -139,7 +139,8 @@ uint8_t get_accel(vector *a, vector *da, float *t)
     last.y = a->y;
     last.z = a->z;
 
-    *t = (float)temp * .008192;
+    //*t = (float)temp * .008192;
+    *t = (float)temp * .002048;
 
     return u;
 }
@@ -179,7 +180,9 @@ void timer_setup(void)
 	TCNT2 = 0;
     TIMSK2 |= _BV(TOIE2);
 
-    TCCR0B |= _BV(CS02);
+    // Time for the clock
+    //TCCR0B |= _BV(CS02); // clock / 256 / 256 = 122Hz = .008192ms per tick
+    TCCR0B |= _BV(CS01) | _BV(CS00); // clock / 65 / 256 = 422Hz = .002048ms per tick
 	TCNT0 = 0;
     TIMSK0 |= _BV(TOIE0);
 }

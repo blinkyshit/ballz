@@ -41,8 +41,6 @@ Transition transition_table[NUM_TRANSITIONS] =
 
 #define PULL_UP_THRESHOLD_Y .2
 #define PULL_UP_THRESHOLD_T .5
-#define IDLE_THRESHOLD      .15
-#define IDLE_THRESHOLD_T    1.00 
 
 #define NUM_PULL_UP_HISTORY_POINTS    16
 #define SWINGING_IDLE_ZERO_CROSSING_THRESHOLD_T .5
@@ -145,7 +143,8 @@ void process_data_period_finder(uint8_t state, __unused vector *a, __unused vect
             period_reg = 2 * period_ball; // 2 = 1 << (filter order = 1) to adjust for final scaling
         period_ball = lowpass(&period_reg, 1, period_ball);
         period_data_valid = 1;
-        //dprintf("%f %f %f\n", t, a->z, da->z);
+        dprintf("period: %f\n", period_ball);
+        //printf("%f %f %f %f\n", t, a->z, da->z, period_ball);
     }
     else
     {
@@ -169,6 +168,7 @@ void process_data_idle(uint8_t state, vector *a, vector *da, float t)
     if (t - t_last_zero_cross > PULL_UP_THRESHOLD_T && fabs(a->y) > PULL_UP_THRESHOLD_Y)
         moveToPullUp = 1;
 
+    //dprintf("%f %f %f\n", t, a->y, da->y);
 }
 
 void process_data_pull_up(uint8_t state, vector *a, vector *da, float t)
@@ -177,27 +177,36 @@ void process_data_pull_up(uint8_t state, vector *a, vector *da, float t)
     if (t - t_last_zero_cross < PULL_UP_THRESHOLD_T)
         moveToIdle = 1;
 
-    if (t - t_last_zero_cross > PULL_UP_THRESHOLD_T && fabs(a->y) > .2)
+    if (state == STATE_PULL_UP)
     {
-        cbi(PORTC, 1);
-        sbi(PORTC, 2);
-        sbi(PORTC, 3);
-    }
-    if (t - t_last_zero_cross > 1.0 && fabs(a->y) > .4)
-    {
-        sbi(PORTC, 1);
-        cbi(PORTC, 2);
-        sbi(PORTC, 3);
-    }
-    if (fabs(da->y) > .25)
-    {
-        moveToSwinging = 1;
-        dprintf("da: %f\n", da->y);
+        if (t - t_last_zero_cross > PULL_UP_THRESHOLD_T && fabs(a->y) > .2)
+        {
+            cbi(PORTC, 1);
+            sbi(PORTC, 2);
+            sbi(PORTC, 3);
+        }
+        if (t - t_last_zero_cross > 1.0 && fabs(a->y) > .4)
+        {
+            sbi(PORTC, 1);
+            cbi(PORTC, 2);
+            sbi(PORTC, 3);
+        }
+        if (fabs(da->y) > .02)
+        {
+            moveToSwinging = 1;
+            //dprintf("da: %f\n", da->y);
+        }
     }
 }
 
+#define IDLE_ACCEL_Y .05
+#define IDLE_DERIV_Y .01
+#define IDLE_THRESHOLD_T 1.00 
+float last_non_idle_t = 0.0;
 void process_data_swinging(uint8_t state, vector *a, vector *da, float t)
 {
+    if (fabs(a->y) > IDLE_ACCEL_Y || fabs(da->y) > IDLE_DERIV_Y)
+        last_non_idle_t = t;
 }
 
 uint8_t state_zero_point(uint8_t prev_state, float t)
@@ -214,7 +223,7 @@ uint8_t state_idle(uint8_t prev_state, float t)
 {
     if (prev_state != STATE_IDLE)
     {
-        dprintf("State: idle\n");
+        //dprintf("State: idle\n");
         // Turn on only the blue LED
         sbi(PORTC, 1);
         sbi(PORTC, 2);
@@ -226,9 +235,6 @@ uint8_t state_idle(uint8_t prev_state, float t)
         return TRANSITION_PULL_UP;
     }
 
-//    if (t - t_last_oob > IDLE_THRESHOLD_T)
-//        break;
-
     return TRANSITION_NO_CHANGE;
 }
 
@@ -236,7 +242,7 @@ uint8_t state_pull_up(uint8_t prev_state, float t)
 {
     if (prev_state != STATE_PULL_UP)
     {
-        dprintf("State: pull up\n");
+        //dprintf("State: pull up\n");
         // Turn on only the red LED to start
         cbi(PORTC, 1);
         sbi(PORTC, 2);
@@ -256,24 +262,6 @@ uint8_t state_pull_up(uint8_t prev_state, float t)
         return TRANSITION_SWINGING;
     }
 
-#if 0
-
-    if (fabs(a.x) > IDLE_THRESHOLD || fabs(a.y) > IDLE_THRESHOLD || fabs(a.z) > IDLE_THRESHOLD)
-    {
-        t_last_oob = t;
-        dprintf("non idle: %f %f %f\n", t, fabs(a.y), fabs(a.z));
-    }
-    if (count == NUM_PULL_UP_HISTORY_POINTS && 
-        fabs(history[index] - history[(index-1) % count] > INITIAL_FALL_SLOPE_THRESHOLD))
-    {
-        sbi(PORTC, 1);
-        sbi(PORTC, 2);
-        sbi(PORTC, 3);
-
-        return TRANSITION_SWINGING;
-    }
-
-#endif
     return TRANSITION_NO_CHANGE;
 }
 
@@ -281,13 +269,13 @@ uint8_t state_swinging(uint8_t prev_state, float t)
 {
     if (prev_state != STATE_SWINGING)
     {
-        dprintf("State: swinging\n");
+        //dprintf("State: swinging\n");
         cbi(PORTC, 1);
         sbi(PORTC, 2);
         cbi(PORTC, 3);
     }
 
-    if (t - t_last_zero_cross < SWINGING_IDLE_ZERO_CROSSING_THRESHOLD_T)
+    if (t - last_non_idle_t > IDLE_THRESHOLD_T)
         return TRANSITION_IDLE;
 
     return TRANSITION_NO_CHANGE;
@@ -300,6 +288,7 @@ void fsm_loop(void)
     float   t;
     uint8_t state = STATE_ZERO_POINT;
     uint8_t prev_state = STATE_START, trans = TRANSITION_NO_CHANGE, i;
+//    uint32_t samples = 0, done = 0;
 
 //    t_last_zero_cross = 0.0;
 
@@ -311,11 +300,20 @@ void fsm_loop(void)
         if (!updated)
             continue;
 
-        // Replace a and da with lowpass filtered versions of the same
-        lowpassv(&a_lp_reg, 3, &a);
-        lowpassv(&da_lp_reg, 3, &da);
+//        samples++;
+//        if (t > 30 && !done)
+//        {
+//            done = 1;
+//            dprintf("Samples: %d\n", samples);
+//        }
 
-        process_data_peaks(state, &a, &da, t);
+        dprintf("%f %f %f\n", t, a.z, da.z);
+
+        // Replace a and da with lowpass filtered versions of the same
+        lowpassv(&a_lp_reg, 5, &a);
+        lowpassv(&da_lp_reg, 5, &da);
+
+        process_data_peaks(STATE_SWINGING, &a, &da, t);
         process_data_zero_point(state, &a, &da, t);
         process_data_period_finder(state, &a, &da, t);
         process_data_idle(state, &a, &da, t);
