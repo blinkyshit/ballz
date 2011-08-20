@@ -75,8 +75,8 @@ void subv(vector *a, vector *subtract)
     a->z -= subtract->z;
 }
 
-#define peaks_to_keep 6
-float peak_time[peaks_to_keep];
+#define PEAKS_TO_KEEP 6
+float peak_time[PEAKS_TO_KEEP];
 unsigned char peak_counter;
 
 void process_data_peaks(uint8_t state, vector *a, vector *da, float t)
@@ -108,7 +108,7 @@ void process_data_peaks(uint8_t state, vector *a, vector *da, float t)
             int i;
 
             looking = 0;
-            for (i = peaks_to_keep - 1; i > 0; i--)
+            for (i = PEAKS_TO_KEEP - 1; i > 0; i--)
                 peak_time[i] = peak_time[i - 1];
             peak_time[0] = t;
             peak_counter++;
@@ -123,7 +123,7 @@ void process_data_zero_point(uint8_t state, vector *a, vector *da, float t)
 }
 
 // deviation tolerance is an empirical number 'proof by eyeball'
-#define         period_jitter_tolerance 0.1
+#define         PERIOD_JITTER_TOLERANCE 0.1
 float           period_ball;
 unsigned char   period_data_valid;
 
@@ -141,12 +141,12 @@ void process_data_period_finder(uint8_t state, __unused vector *a, __unused vect
     last_peak_counter = peak_counter;
 
     // compute the average of: difference of the differences: ([i]-[i+1]) - ([i+1]-[i+2]) 
-    for (i = 0; i < peaks_to_keep - 2; i++)
-        deviation += fabs(peak_time[i] - 2*peak_time[i+1] + peak_time[i+2]) / (peaks_to_keep-2);
+    for (i = 0; i < PEAKS_TO_KEEP - 2; i++)
+        deviation += fabs(peak_time[i] - 2*peak_time[i+1] + peak_time[i+2]) / (PEAKS_TO_KEEP-2);
 
-    if (deviation < period_jitter_tolerance)
+    if (deviation < PERIOD_JITTER_TOLERANCE)
     {
-        period_ball = (peak_time[0] - peak_time[peaks_to_keep - 1]) / (peaks_to_keep - 1);
+        period_ball = (peak_time[0] - peak_time[PEAKS_TO_KEEP - 1]) / (PEAKS_TO_KEEP - 1);
         period_ball *= 4; 		 // Z axis peak to -peak occur twice as fast as x or y
         if (period_reg < 0.1) 	 // first sample? Then prime the pump with our current value
             period_reg = 2 * period_ball; // 2 = 1 << (filter order = 1) to adjust for final scaling
