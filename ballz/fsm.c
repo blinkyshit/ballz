@@ -350,9 +350,9 @@ void fsm_loop(void)
         
 //        dprintf("%f %f %f\n", t, a.y, da.y);
 
-        process_data_peaks(STATE_SWINGING, &a, &da, t);
+        process_data_peaks(STATE_SWINGING, &a_no_dc, &da, t);
         process_data_zero_point(state, &a, &da, t);
-        process_data_period_finder(state, &a, &da, t);
+        process_data_period_finder(state, &a_no_dc, &da, t);
         process_data_idle(state, &a, &da, t);
         process_data_pull_up(state, &a, &da, t);
         process_data_swinging(state, &a, &da, t);
