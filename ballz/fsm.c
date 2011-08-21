@@ -187,12 +187,12 @@ void process_data_idle(uint8_t state, vector *a, vector *da, float t)
 
 // If the absolute value of the derivative of the Z axis
 // goes above this threshold, we will consider the user to have let go of the ball.
-#define SWING_START_DERIV_THRESHOLD_Z .01
+#define SWING_START_DERIV_THRESHOLD_Z .005
 void process_data_pull_up(uint8_t state, vector *a, vector *da, float t)
 {
     // If we're seeing zero crossings, then the ball is near idle again
-    if (t - t_last_zero_cross < PULL_UP_THRESHOLD_T)
-        moveToIdle = 1;
+    // if (t - t_last_zero_cross < PULL_UP_THRESHOLD_T)
+    //    moveToIdle = 1;
 
     if (state == STATE_PULL_UP)
     {
@@ -215,13 +215,23 @@ void process_data_pull_up(uint8_t state, vector *a, vector *da, float t)
 
 void process_data_swinging(uint8_t state, vector *a, vector *da, float t)
 {
-    static float idle_check_reg = 0.0;
+    static float idle_check_reg = 100.0;
     float        idle_check;
-    
-    idle_check = lowpass(&idle_check_reg, 12, a->y * a->y);
-//    if (idle_check < .0006)
-//        moveToIdle = 1;
-    dprintf("%f %f\n", t, idle_check);
+    static int   counter = 0;
+
+    if (state != STATE_SWINGING)
+    {
+        idle_check_reg = 100.0;
+        return;
+    }
+
+    idle_check = lowpass(&idle_check_reg, 10, a->z * a->z);
+    if (idle_check < .0001)
+        moveToIdle = 1;
+
+    ++counter;
+    if ((counter & 0x3f) == 0 || moveToIdle)
+        dprintf("%f %f\n", t, idle_check);
 }
 
 uint8_t state_zero_point(uint8_t prev_state, float t)
@@ -353,7 +363,7 @@ void fsm_loop(void)
         process_data_period_finder(state, &a_no_dc, &da, t);
         process_data_idle(state, &a, &da, t);
         process_data_pull_up(state, &a, &da, t);
-        process_data_swinging(state, &a, &da, t);
+        process_data_swinging(state, &a_no_dc, &da, t);
 
         switch(state)
         {
