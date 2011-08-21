@@ -51,8 +51,8 @@ Transition transition_table[NUM_TRANSITIONS] =
 };
 
 // The lowpass filter constants for our main data stream and for our DC offset removal
-#define LOWPASS_K           5
-#define LOWPASS_DC_FILTER_K 10
+#define LOWPASS_K           3
+#define LOWPASS_DC_FILTER_K 6
 
 // TODO: Document me
 #define PULL_UP_THRESHOLD_Y .2
@@ -129,14 +129,14 @@ void process_data_zero_point(uint8_t state, vector *a, vector *da, float t)
 }
 
 // deviation tolerance is an empirical number 'proof by eyeball'
-#define         PERIOD_JITTER_TOLERANCE 0.1
+#define         PERIOD_JITTER_TOLERANCE 0.2
 float           period_ball;
 unsigned char   period_data_valid;
 
 void process_data_period_finder(uint8_t state, __unused vector *a, __unused vector *da, __unused float t)
 {
     static unsigned char last_peak_counter = 0;
-    int i;
+    int i, counter;
     float deviation = 0.0;
     static float period_reg = 0.0;
 
@@ -150,6 +150,9 @@ void process_data_period_finder(uint8_t state, __unused vector *a, __unused vect
     for (i = 0; i < PEAKS_TO_KEEP - 2; i++)
         deviation += fabs(peak_time[i] - 2*peak_time[i+1] + peak_time[i+2]) / (PEAKS_TO_KEEP-2);
 
+//    ++counter;
+//    if ((counter & 0x3f) == 0)
+//        dprintf("p:%f %f\n", period_ball, deviation);
     if (deviation < PERIOD_JITTER_TOLERANCE)
     {
         period_ball = (peak_time[0] - peak_time[PEAKS_TO_KEEP - 1]) / (PEAKS_TO_KEEP - 1);
@@ -159,7 +162,7 @@ void process_data_period_finder(uint8_t state, __unused vector *a, __unused vect
         period_ball = lowpass(&period_reg, 1, period_ball);
         period_data_valid = 1;
         save_period(period_ball);
-        //dprintf("period: %f (%f)\n", period_ball, deviation);
+        dprintf("period: %f (%f)\n", period_ball, deviation);
         //printf("%f %f %f %f\n", t, a->z, da->z, period_ball);
     }
     else
@@ -333,9 +336,10 @@ uint8_t state_swinging(uint8_t prev_state, float t)
     return TRANSITION_NO_CHANGE;
 }
 
+#define ZERO_CROSSING_COUNTS 20
 uint8_t is_idle(vector *a, vector *da, float t)
 {
-    static float cross_time[10] = {0,}, last_dz = 0.0;
+    static float cross_time[ZERO_CROSSING_COUNTS] = {0,}, last_dz = 0.0;
     int i;
     
     i = sign(last_dz) - sign(da->z);
@@ -343,12 +347,12 @@ uint8_t is_idle(vector *a, vector *da, float t)
     
     if (i)
     {   // we have a crossing
-        for (i=9; i>0; i--)
+        for (i=ZERO_CROSSING_COUNTS - 1; i>0; i--)
             cross_time[i] = cross_time[i-1];
         cross_time[0] = t;
     }
 
-    if (t - cross_time[9] < 1.0)
+    if (t - cross_time[ZERO_CROSSING_COUNTS - 1] < 1.0)
         return 1;
 
     return 0;
@@ -413,7 +417,8 @@ enum BallState infer_behavior(vector *a, vector *da, float t)
         last_change_t = t;
     }
 
-    if (period_data_valid || (last == BALL_RELEASE && (t - last_change_t > 0.5)) )
+//    if (period_data_valid || (last == BALL_RELEASE && (t - last_change_t > 0.5)) )
+    if ((last == BALL_RELEASE && (t - last_change_t > 0.5)) )
     {
         last = BALL_SWINGING;
         last_change_t = t;
