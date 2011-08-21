@@ -334,34 +334,91 @@ uint8_t state_swinging(uint8_t prev_state, float t)
 
 uint8_t is_idle(vector *a, vector *da, float t)
 {
-    static float first_zero_cross_time = 0.0, last_dz = 0.0;
-    static int crossing_count = 0;
-    uint8_t ret = 0;
+    static float cross_time[10] = {0,}, last_dz = 0.0;
+    int i;
     
-    if (sign(last_dz) != sign(da->z)) {
-        crossing_count++;
-        if (crossing_count == 1)
-            first_zero_cross_time = t;
-        if (crossing_count == 10)
-        {
-            if (t - first_zero_cross_time < 0.5)
-                ret = 1;
-            zero_cross_time = t;
-            crossing_count = 0;
-        }
-    }
-    
+    i = sign(last_dz) - sign(da->z);
     last_dz = da->z;
-    return ret;
+    
+    if (i)
+    {   // we have a crossing
+        for (i=9; i>0; i--)
+            cross_time[i] = cross_time[i-1];
+        cross_time[0] = t;
+    }
+
+    if (t - cross_time[9] < 1.0)
+        return 1;
+
+    return 0;
 }
 
-enum infer_behavior(vector *a, vector *da, float t)
+uint8_t is_pullup(vector *a, vector *da, float t)
+{
+    // Ball periods range between 1.45 and 2.5 seconds. Z is half that.
+    // if dz is positive for more than 1/4 of the max ball period, then
+    // we're being pulled back in one of the directions
+    
+    static float first_positive_time = 0.0;
+    
+    if (da->z <= 0.0)
+    {
+        first_positive_time = 0.0;
+        return 0;
+    }
+    
+    if (first_positive_time < 0.0001) // testing for time = 0.0
+        first_positive_time = t;
+    if (t - first_positive_time > 0.25 * 3)
+        return 1;
+    return 0;
+}
+
+enum BallState infer_behavior(vector *a, vector *da, float t)
 {
     // examines a, da, t, and possibly past behavior to determine a best guess for what's
-    // currently happening with the ball
-    if (is_idle(a, da, t))
-        return BALL_AT_REST;
+    // currently happening with the ball. If none of the conditions fire, return the last state.
+
+    static enum BallState last = BALL_AT_REST;
+    static float last_change_t = 0.0;
+
+    if (a->z > 1.0)
+    {
+        last = BALL_UPSIDE_DOWN;
+        last_change_t = t;
+    }
     
+    if (is_idle(a, da, t))
+    {
+        last = BALL_AT_REST;
+        last_change_t = t;
+    }
+    
+    if (a->z > 0.1)
+    {
+        last = BALL_RELEASE;
+        last_change_t = t;
+    }
+    
+    if (is_pullup(a, da, t))
+    {
+        last = BALL_PULL_UP;
+        last_change_t = t;
+    }
+    
+    if (0)
+    {
+        last = BALL_PLAYA_BADGER;
+        last_change_t = t;
+    }
+
+    if (period_data_valid || (last == BALL_RELEASE && (t - last_change_t > 0.5)) )
+    {
+        last = BALL_SWINGING;
+        last_change_t = t;
+    }
+    
+    return last;
 }
 
 void fsm_loop(void)
@@ -371,6 +428,7 @@ void fsm_loop(void)
     float   t;
     uint8_t state = STATE_ZERO_POINT;
     uint8_t prev_state = STATE_START, trans = TRANSITION_NO_CHANGE, i;
+    enum BallState current_ball_state, previous_ball_state;
 //    uint32_t samples = 0, done = 0;
 
 //    t_last_zero_cross = 0.0;
@@ -415,7 +473,20 @@ void fsm_loop(void)
         process_data_pull_up(state, &a, &da, t);
         process_data_swinging(state, &a_no_dc, &da, t);
 
-        enum BallState ball_state = infer_behavior(&a, &da, t);
+        current_ball_state = infer_behavior(&a, &da, t);
+
+        if (current_ball_state != previous_ball_state)
+            switch (current_ball_state) {
+                case BALL_AT_REST: dprintf("%f: Ball at rest\n", t); break;
+                case BALL_PULL_UP: dprintf("%f: Ball pull up\n", t); break;
+                case BALL_RELEASE: dprintf("%f: Ball release\n", t); break;
+                case BALL_SWINGING: dprintf("%f: Ball swinging\n", t); break;
+                case BALL_UPSIDE_DOWN: dprintf("%f: Ball upside down\n", t); break;
+                case BALL_PLAYA_BADGER: dprintf("%f: Playa badgers are screwing with us!\n", t); break;
+                default: dprintf("%f: ** Unknown ball state!\n", t); break;
+            }
+
+        previous_ball_state = current_ball_state;
 
         switch(state)
         {
