@@ -12,6 +12,16 @@
 #define STATE_PULL_UP            4
 #define STATE_SWINGING           5
 
+enum BallState
+{
+    BALL_AT_REST                  = 0,
+    BALL_PULL_UP,
+    BALL_RELEASE,
+    BALL_SWINGING,
+    BALL_UPSIDE_DOWN,
+    BALL_PLAYA_BADGER
+};
+
 #define TRANSITION_NO_CHANGE     0
 #define TRANSITION_ZERO_POINT    1
 #define TRANSITION_PERIOD_FINDER 2
@@ -322,6 +332,12 @@ uint8_t state_swinging(uint8_t prev_state, float t)
     return TRANSITION_NO_CHANGE;
 }
 
+enum infer_behavior(vector *a, vector *da, float t)
+{
+    // examines a, da, t, and possibly past behavior to determine a best guess for what's
+    // currently happening with the ball
+}
+
 void fsm_loop(void)
 {
     vector  a, da, a_dc, a_no_dc;
@@ -372,6 +388,8 @@ void fsm_loop(void)
         process_data_idle(state, &a, &da, t);
         process_data_pull_up(state, &a, &da, t);
         process_data_swinging(state, &a_no_dc, &da, t);
+
+        enum BallState ball_state = infer_behavior(&a, &da, t);
 
         switch(state)
         {
