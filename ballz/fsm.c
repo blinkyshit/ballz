@@ -198,15 +198,15 @@ void process_data_pull_up(uint8_t state, vector *a, vector *da, float t)
     {
         if (t - t_last_zero_cross > PULL_UP_THRESHOLD_T && fabs(a->y) > .2)
         {
-            cbi(PORTC, 1);
-            sbi(PORTC, 2);
-            sbi(PORTC, 3);
+            red_leds(1);
+            green_leds(0);
+            blue_leds(0);
         }
         if (t - t_last_zero_cross > 1.0 && fabs(a->y) > .4)
         {
-            sbi(PORTC, 1);
-            cbi(PORTC, 2);
-            sbi(PORTC, 3);
+            red_leds(0);
+            green_leds(1);
+            blue_leds(0);
         }
         if (fabs(da->z) > SWING_START_DERIV_THRESHOLD_Z)
             moveToSwinging = 1;
@@ -250,9 +250,9 @@ uint8_t state_idle(uint8_t prev_state, float t)
     {
         dprintf("State: idle\n");
         // Turn on only the blue LED
-        sbi(PORTC, 1);
-        sbi(PORTC, 2);
-        cbi(PORTC, 3);
+        red_leds(0);
+        green_leds(0);
+        blue_leds(1);
     }
     if (moveToPullUp)
     {
@@ -269,9 +269,9 @@ uint8_t state_pull_up(uint8_t prev_state, float t)
     {
         dprintf("State: pull up\n");
         // Turn on only the red LED to start
-        cbi(PORTC, 1);
-        sbi(PORTC, 2);
-        sbi(PORTC, 3);
+        red_leds(1);
+        green_leds(0);
+        blue_leds(0);
     }
 
     if (moveToIdle)
@@ -295,9 +295,9 @@ uint8_t state_swinging(uint8_t prev_state, float t)
     if (prev_state != STATE_SWINGING)
     {
         dprintf("State: swinging\n");
-        cbi(PORTC, 1);
-        sbi(PORTC, 2);
-        cbi(PORTC, 3);
+        red_leds(1);
+        green_leds(0);
+        blue_leds(1);
     }
 
     if (moveToIdle)
