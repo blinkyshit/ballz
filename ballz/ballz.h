@@ -7,6 +7,9 @@ typedef struct
 } vector;
 
 uint8_t get_accel(vector *a, vector *da, float *t);
+void    red_leds(uint8_t state);
+void    blue_leds(uint8_t state);
+void    green_leds(uint8_t state);
 
 // Bit manipulation macros
 #define sbi(a, b) ((a) |= 1 << (b))       //sets bit B in variable A
