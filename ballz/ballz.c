@@ -13,8 +13,8 @@
 
 #define ADC_START         0  
 #define ADC_Z             0
-#define ADC_Y             1
-#define ADC_X             2
+#define ADC_Y             2
+#define ADC_X             1
 #define ADC_END           3  
 
 #define MID_POINT   1.650
@@ -26,8 +26,8 @@
 // Each ADC step = this many volts
 #define ADC_SENS .0025
 
-#define X_OFFSET 660.0
-#define Y_OFFSET 627.0
+#define X_OFFSET 627.0
+#define Y_OFFSET 660.0
 #define Z_OFFSET 535.0
 
 /* Accelerometer info: MMA7331L
