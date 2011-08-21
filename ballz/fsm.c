@@ -332,10 +332,36 @@ uint8_t state_swinging(uint8_t prev_state, float t)
     return TRANSITION_NO_CHANGE;
 }
 
+uint8_t is_idle(vector *a, vector *da, float t)
+{
+    static float first_zero_cross_time = 0.0, last_dz = 0.0;
+    static int crossing_count = 0;
+    uint8_t ret = 0;
+    
+    if (sign(last_dz) != sign(da->z)) {
+        crossing_count++;
+        if (crossing_count == 1)
+            first_zero_cross_time = t;
+        if (crossing_count == 10)
+        {
+            if (t - first_zero_cross_time < 0.5)
+                ret = 1;
+            zero_cross_time = t;
+            crossing_count = 0;
+        }
+    }
+    
+    last_dz = da->z;
+    return ret;
+}
+
 enum infer_behavior(vector *a, vector *da, float t)
 {
     // examines a, da, t, and possibly past behavior to determine a best guess for what's
     // currently happening with the ball
+    if (is_idle(a, da, t))
+        return BALL_AT_REST;
+    
 }
 
 void fsm_loop(void)
