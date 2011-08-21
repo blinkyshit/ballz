@@ -98,7 +98,8 @@ void process_data_peaks(uint8_t state, vector *a, vector *da, float t)
     static float last_val = 0.0, last_deriv = 0.0;
     static int looking = 0;
     
-    if (state != STATE_PERIOD_FINDER && state != STATE_SWINGING)
+    //if (state != STATE_PERIOD_FINDER && state != STATE_SWINGING)
+    if (state != BALL_SWINGING)
         return;
 
     if (sign(last_val) - sign(a->z))
@@ -209,7 +210,7 @@ void process_data_pull_up(uint8_t state, vector *a, vector *da, float t)
     // if (t - t_last_zero_cross < PULL_UP_THRESHOLD_T)
     //    moveToIdle = 1;
 
-    if (state == STATE_PULL_UP)
+    if (0) //state == STATE_PULL_UP)
     {
         if (t - t_last_zero_cross > PULL_UP_THRESHOLD_T && fabs(a->y) > .2)
         {
@@ -466,8 +467,8 @@ void fsm_loop(void)
         
 //        dprintf("%f %f %f\n", t, a.y, da.y);
 
-        process_data_peaks(STATE_SWINGING, &a_no_dc, &da, t);
-        process_data_zero_point(state, &a, &da, t);
+        process_data_peaks(current_ball_state, &a_no_dc, &da, t);
+        process_data_zero_point(current_ball_state, &a, &da, t);
         process_data_period_finder(state, &a_no_dc, &da, t);
         process_data_idle(state, &a, &da, t);
         process_data_pull_up(state, &a, &da, t);
@@ -477,17 +478,37 @@ void fsm_loop(void)
 
         if (current_ball_state != previous_ball_state)
             switch (current_ball_state) {
-                case BALL_AT_REST: dprintf("%f: Ball at rest\n", t); break;
-                case BALL_PULL_UP: dprintf("%f: Ball pull up\n", t); break;
-                case BALL_RELEASE: dprintf("%f: Ball release\n", t); break;
-                case BALL_SWINGING: dprintf("%f: Ball swinging\n", t); break;
+                case BALL_AT_REST: 
+                    dprintf("%f: Ball at rest\n", t); 
+                    red_leds(0);
+                    green_leds(0);
+                    blue_leds(1);
+                    break;
+                case BALL_PULL_UP: 
+                    red_leds(1);
+                    green_leds(0);
+                    blue_leds(0);
+                    dprintf("%f: Ball pull up\n", t); 
+                    break;
+                case BALL_RELEASE: 
+                    dprintf("%f: Ball release\n", t); 
+                    red_leds(0);
+                    green_leds(1);
+                    blue_leds(0);
+                    break;
+                case BALL_SWINGING: 
+                    dprintf("%f: Ball swinging\n", t); 
+                    red_leds(1);
+                    green_leds(0);
+                    blue_leds(1);
+                    break;
                 case BALL_UPSIDE_DOWN: dprintf("%f: Ball upside down\n", t); break;
                 case BALL_PLAYA_BADGER: dprintf("%f: Playa badgers are screwing with us!\n", t); break;
                 default: dprintf("%f: ** Unknown ball state!\n", t); break;
             }
 
         previous_ball_state = current_ball_state;
-
+#if 0
         switch(state)
         {
             case STATE_ZERO_POINT:
@@ -523,5 +544,6 @@ void fsm_loop(void)
                 break;
             }
         }
+#endif
     }
 }
