@@ -5,6 +5,7 @@
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
 #include <util/delay.h>
+#include <avr/eeprom.h>
 
 #include "debug.h"
 #include "ballz.h"
@@ -227,6 +228,99 @@ void flash_led(void)
     }
 }
 
+void red_leds(uint8_t state)
+{
+    if (state)
+    {
+        cbi(PORTC, 7);
+        cbi(PORTC, 4);
+        cbi(PORTC, 1);
+        cbi(PORTD, 6);
+        cbi(PORTD, 3);
+        cbi(PORTB, 6);
+        cbi(PORTB, 3);
+        cbi(PORTB, 0);
+    }
+    else
+    {
+        sbi(PORTC, 7);
+        sbi(PORTC, 4);
+        sbi(PORTC, 1);
+        sbi(PORTD, 6);
+        sbi(PORTD, 3);
+        sbi(PORTB, 6);
+        sbi(PORTB, 3);
+        sbi(PORTB, 0);
+    }
+}
+
+void green_leds(uint8_t state)
+{
+    if (state)
+    {
+        cbi(PORTA, 7);
+        cbi(PORTC, 5);
+        cbi(PORTC, 2);
+        cbi(PORTD, 7);
+        cbi(PORTD, 4);
+        cbi(PORTB, 7);
+        cbi(PORTB, 4);
+        cbi(PORTB, 1);
+    }
+    else
+    {
+        sbi(PORTA, 7);
+        sbi(PORTC, 5);
+        sbi(PORTC, 2);
+        sbi(PORTD, 7);
+        sbi(PORTD, 4);
+        sbi(PORTB, 7);
+        sbi(PORTB, 4);
+        sbi(PORTB, 1);
+    }
+}
+
+void blue_leds(uint8_t state)
+{
+    if (state)
+    {
+        cbi(PORTA, 6);
+        cbi(PORTC, 6);
+        cbi(PORTC, 3);
+        cbi(PORTC, 0);
+        cbi(PORTD, 5);
+        cbi(PORTD, 2);
+        cbi(PORTB, 5);
+        cbi(PORTB, 2);
+    }
+    else
+    {
+        sbi(PORTA, 6);
+        sbi(PORTC, 6);
+        sbi(PORTC, 3);
+        sbi(PORTC, 0);
+        sbi(PORTD, 5);
+        sbi(PORTD, 2);
+        sbi(PORTB, 5);
+        sbi(PORTB, 2);
+    }
+}
+
+uint8_t EEMEM _ee_period;
+uint8_t get_period(void)
+{
+    uint8_t _period = 0.0;
+//    if (_period != 0.0)
+//        return _period; 
+
+    return eeprom_read_byte((uint8_t *)10);
+}
+
+void set_period(uint8_t t)
+{
+    eeprom_update_byte((uint8_t *)10, t);
+}
+ 
 int main(void)
 {
     serial_init();
@@ -240,6 +334,9 @@ int main(void)
 
     flash_led();
     dprintf("look at my ballz!\n");
+
+    set_period(69);
+    dprintf("period: %d\n", get_period());
 
     sei();
     fsm_loop();
