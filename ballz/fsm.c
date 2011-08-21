@@ -81,6 +81,7 @@ void subv(vector *a, vector *subtract)
 #define PEAKS_TO_KEEP 6
 float peak_time[PEAKS_TO_KEEP];
 unsigned char peak_counter;
+unsigned char last_peak_side = 0, start_peak_side = -1;
 
 void process_data_peaks(uint8_t state, vector *a, vector *da, float t)
 {
@@ -115,6 +116,7 @@ void process_data_peaks(uint8_t state, vector *a, vector *da, float t)
                 peak_time[i] = peak_time[i - 1];
             peak_time[0] = t;
             peak_counter++;
+            last_peak_side = sign(a->y);
         }
     }
     last_val = a->z;
@@ -169,6 +171,18 @@ void process_data_period_finder(uint8_t state, __unused vector *a, __unused vect
     }
 }
 
+// returns the phase as a value from [0, 1)
+float swing_phase(float t)
+{
+    // subtract current time from last peak time, divide by the period, return the fractional part
+    // slightly complicated as global peak array is on z, which is twice as fast as the period
+    
+    float phase = (t - peak_time[0]) / period_ball;
+    if (last_peak_side != start_peak_side)
+        phase += 0.5;
+    return phase;
+}
+
 static float   t_last_zero_cross = 0.0;
 static uint8_t moveToPullUp = 0;
 static uint8_t moveToIdle = 0;
@@ -210,7 +224,10 @@ void process_data_pull_up(uint8_t state, vector *a, vector *da, float t)
             sbi(PORTC, 3);
         }
         if (fabs(da->z) > SWING_START_DERIV_THRESHOLD_Z)
+        {
             moveToSwinging = 1;
+            start_peak_side = sign(a->y);
+        }
     }
 }
 
