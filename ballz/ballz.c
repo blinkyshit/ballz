@@ -188,6 +188,10 @@ void timer_setup(void)
     TIMSK0 |= _BV(TOIE0);
 }
 
+void save_period(float period)
+{
+}
+
 void flash_led(void)
 {
     uint8_t i, j;
