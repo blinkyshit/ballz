@@ -436,11 +436,7 @@ void fsm_loop(void)
 
     while(1)
     {
-        uint8_t updated; 
-
-        updated = get_accel(&a, &da, &t);
-        if (!updated)
-            continue;
+        get_accel(&a, &da, &t);
 
 //        samples++;
 //        if (t > 30 && !done)

@@ -16,7 +16,7 @@
 #define ADC_Z             0
 #define ADC_Y             2
 #define ADC_X             1
-#define ADC_END           3  
+#define ADC_END           2  
 
 #define MID_POINT   1.650
 #define MID_POINT_X 1.6375
@@ -56,10 +56,6 @@
 
 */
 
-// ADC globals
-volatile uint8_t  adc_index = ADC_START;
-volatile uint16_t accel_x, accel_y, accel_z = 0;
-volatile int8_t   data_updated = 0;
 
 // clock globals
 volatile uint32_t ticks = 0;
@@ -71,67 +67,55 @@ ISR (TIMER0_OVF_vect)
 
 ISR (TIMER2_OVF_vect)
 {
-    if ((ADCSRA & (1<<ADSC)) != 0)
-        return;
-
-    ADMUX &= 0xF8;
-    ADMUX |= adc_index;
-    ADCSRA |= (1<<ADSC)|(1<<ADIE);
 }
 
-ISR(ADC_vect)
+// How often we read ADC values, measured in ticks
+#define CLOCK_PERIOD 5 
+
+void get_accel(vector *a, vector *da, float *t)
 {
-    uint8_t hi, low;
+    uint8_t         hi, low, i;
+    uint32_t        temp;
+    static uint32_t last_tick = 0;
+    static          vector last = { 0.0, 0.0, 0.0 };
 
-    low = ADCL;
-    hi = ADCH;
-
-    if (adc_index == ADC_X)
+    do
     {
-        accel_x = (float)((hi << 8) | low);
-    }
-    else
-    if (adc_index == ADC_Y)
-    {
-        accel_y = (float)((hi << 8) | low);
-    }
-    else
-    if (adc_index == ADC_Z)
-    {
-        accel_z = (float)((hi << 8) | low);
-        data_updated++;
-    }
-
-    adc_index++;
-    if (adc_index == ADC_END)
-        adc_index = ADC_START;
-}
-
-uint8_t get_accel(vector *a, vector *da, float *t)
-{
-    uint8_t       u;
-    uint16_t      x, y, z;
-    uint32_t      temp;
-    static vector last = { 0.0, 0.0, 0.0 };
-
-    cli();
-    if (!data_updated)
-    {
+        cli();
+        temp = ticks;
         sei();
-        return 0;
+        if (last_tick == 0)
+            last_tick = temp;
     }
+    while(temp - last_tick < CLOCK_PERIOD);
 
-    x = accel_x;
-    y = accel_y;
-    z = accel_z;
-    u = data_updated;
-    data_updated = 0;
-    temp = ticks;
-    sei();
+    for(i = ADC_START; i <= ADC_END; i++)
+    {
+        ADMUX &= 0xF8;
+        ADMUX |= i;
+        ADCSRA |= (1<<ADSC);
 
-    a->x = ((float)x - X_OFFSET) * ADC_SENS / SENSITIVITY;
-    a->y = ((float)y - Y_OFFSET) * ADC_SENS / SENSITIVITY;
-    a->z = ((float)z - Z_OFFSET) * ADC_SENS / SENSITIVITY;
+        while((ADCSRA & (1<<ADSC)) != 0)
+            ;
+
+        low = ADCL;
+        hi = ADCH;
+        if (i == ADC_X)
+            a->x = (float)((hi << 8) | low);
+        else
+        if (i == ADC_Y)
+            a->y = (float)((hi << 8) | low);
+        else
+        if (i == ADC_Z)
+            a->z = (float)((hi << 8) | low);
+    }
+    last_tick = temp;
+ 
+    *t = (float)temp * .002048;
+
+    a->x = ((float)a->x - X_OFFSET) * ADC_SENS / SENSITIVITY;
+    a->y = ((float)a->y - Y_OFFSET) * ADC_SENS / SENSITIVITY;
+    a->z = ((float)a->z - Z_OFFSET) * ADC_SENS / SENSITIVITY;
     da->x = a->x - last.x;
     da->y = a->y - last.y;
     da->z = a->z - last.z;
@@ -140,10 +124,6 @@ uint8_t get_accel(vector *a, vector *da, float *t)
     last.y = a->y;
     last.z = a->z;
 
-    //*t = (float)temp * .008192;
-    *t = (float)temp * .002048;
-
-    return u;
 }
 
 void adc_setup(void)
@@ -176,10 +156,10 @@ uint8_t adc_read(uint8_t ch)
 
 void timer_setup(void)
 {
-    // ADC conversion completion check timer
-    TCCR2B |= _BV(CS21); // | _BV(CS21);// | _BV(CS20);
-	TCNT2 = 0;
-    TIMSK2 |= _BV(TOIE2);
+    // Unused for now
+    //TCCR2B |= _BV(CS21); // | _BV(CS21);// | _BV(CS20);
+	//TCNT2 = 0;
+    //TIMSK2 |= _BV(TOIE2);
 
     // Time for the clock
     //TCCR0B |= _BV(CS02); // clock / 256 / 256 = 122Hz = .008192ms per tick
@@ -313,16 +293,16 @@ void blue_leds(uint8_t state)
 uint8_t EEMEM _ee_period;
 uint8_t get_period(void)
 {
-    uint8_t _period = 0.0;
+//    uint8_t _period = 0.0;
 //    if (_period != 0.0)
 //        return _period; 
 
-    return eeprom_read_byte((uint8_t *)10);
+    return eeprom_read_byte(&_ee_period);
 }
 
 void set_period(uint8_t t)
 {
-    eeprom_update_byte((uint8_t *)10, t);
+    eeprom_update_byte(&_ee_period, t);
 }
  
 int main(void)
@@ -339,8 +319,8 @@ int main(void)
     flash_led();
     dprintf("look at my ballz!\n");
 
-    set_period(69);
-    dprintf("period: %d\n", get_period());
+    //set_period(45);
+    //dprintf("period: %d\n", get_period());
 
     sei();
     fsm_loop();
