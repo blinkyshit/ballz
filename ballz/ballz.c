@@ -291,7 +291,10 @@ void blue_leds(uint8_t state)
 }
 
 uint16_t EEMEM _ee_period;
+uint16_t EEMEM _ee_x_offset, _ee_y_offset, _ee_z_offset;
 float          _period;
+float          _x_offset, _y_offset, _z_offset;
+
 float get_period(void)
 {
     uint16_t temp;
@@ -318,6 +321,36 @@ void set_period(float t)
     _period = t;
     temp = (uint16_t)(t * 1000.0);
     eeprom_update_word(&_ee_period, temp);
+}
+
+void get_offsets(uint16_t *x, uint16_t *y, uint16_t *z)
+{
+    if (_x_offset == 0)
+    {
+        _x_offset = eeprom_read_word(&_ee_x_offset);
+        _y_offset = eeprom_read_word(&_ee_y_offset);
+        _z_offset = eeprom_read_word(&_ee_z_offset);
+        if (_x_offset == 0xFFFF)
+            _x_offset = 0;
+        if (_y_offset == 0xFFFF)
+            _y_offset = 0;
+        if (_z_offset == 0xFFFF)
+            _z_offset = 0;
+    }
+
+    *x = _x_offset;
+    *y = _y_offset;
+    *z = _z_offset;
+}
+
+void set_offsets(uint16_t x, uint16_t y, uint16_t z)
+{
+    _x_offset = x;
+    _y_offset = y;
+    _z_offset = z;
+    eeprom_update_word(&_ee_x_offset, x);
+    eeprom_update_word(&_ee_y_offset, y);
+    eeprom_update_word(&_ee_z_offset, z);
 }
 
 // Fix fuse bit: avrdude -p m324a -P usb -c avrispmkII -U hfuse:w:0xD1:m
