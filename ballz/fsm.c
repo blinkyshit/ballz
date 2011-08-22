@@ -353,7 +353,8 @@ uint8_t is_idle(vector *a, vector *da, float t)
     }
 
     if (t - cross_time[ZERO_CROSSING_COUNTS - 1] < 1.0)
-        return 1;
+        if (fabs(a->y) < 0.3)
+            return 1;
 
     return 0;
 }
@@ -366,7 +367,7 @@ uint8_t is_pullup(vector *a, vector *da, float t)
     
     static float first_positive_time = 0.0;
     
-    if (da->z <= 0.0)
+    if (a->y > -0.35)
     {
         first_positive_time = 0.0;
         return 0;
@@ -393,13 +394,13 @@ enum BallState infer_behavior(vector *a, vector *da, float t)
         last_change_t = t;
     }
     
-    if (is_idle(a, da, t))
+    if (last != BALL_RELEASE && is_idle(a, da, t))
     {
         last = BALL_AT_REST;
         last_change_t = t;
     }
     
-    if (a->z > 0.1)
+    if ( last == BALL_PULL_UP && da->y > 0.02)
     {
         last = BALL_RELEASE;
         last_change_t = t;
@@ -434,7 +435,7 @@ void fsm_loop(void)
     float   t;
     uint8_t state = STATE_ZERO_POINT;
     uint8_t prev_state = STATE_START, trans = TRANSITION_NO_CHANGE, i;
-    enum BallState current_ball_state, previous_ball_state;
+    enum BallState current_ball_state = -1, previous_ball_state;
 //    uint32_t samples = 0, done = 0;
 
 //    t_last_zero_cross = 0.0;
@@ -458,7 +459,7 @@ void fsm_loop(void)
 
         a_no_dc = a;
         // if we're past the initial pull back impulse, then try to find center of swinging
-        if (state == STATE_PERIOD_FINDER || state == STATE_SWINGING)
+        if (current_ball_state == BALL_AT_REST || current_ball_state == BALL_RELEASE || current_ball_state == BALL_SWINGING)
         {
             // Estimate the DC offset of a, then subtract that from a_no_dc to center the data
             a_dc = a;
