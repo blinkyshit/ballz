@@ -4,7 +4,7 @@ OBJ2HEX=avr-objcopy
 TARGET=ballz
 
 program: $(TARGET).hex 
-	sudo avrdude -p m324a -F -P usb -c avrispmkII -Uflash:w:$(TARGET).hex
+	sudo avrdude -p m324a -P usb -c avrispmkII -Uflash:w:$(TARGET).hex
 
 $(TARGET).hex: $(TARGET).obj
 	$(OBJ2HEX) -R .eeprom -O ihex $< $@
