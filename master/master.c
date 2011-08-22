@@ -59,6 +59,18 @@ void flash_led(void)
         _delay_ms(100); 
     }
 }
+void flash_led_fuss(void)
+{
+    uint8_t i;
+
+    for(i = 0;; i++)
+    {
+        sbi(PORTD, 4);
+        _delay_ms(100); 
+        cbi(PORTD, 4);
+        _delay_ms(100); 
+    }
+}
 
 void adc_setup(void)
 {
@@ -101,13 +113,17 @@ uint8_t are_lights_on(void)
 
 void turn_lights_on(void)
 {
-    sbi(PORTB, 3);
+    dprintf("light ON!\n");
+    sbi(PORTB, 5);
+    cbi(PORTB, 4);
     light_state = 1;
 }
 
 void turn_lights_off(void)
 {
-    cbi(PORTB, 3);
+    dprintf("light OFF!\n");
+    cbi(PORTB, 5);
+    sbi(PORTB, 4);
     light_state = 0;
 }
 
@@ -121,15 +137,16 @@ int main(void)
     adc_setup();
     timer_setup();
 
-    // PA0: light sensor read
-    // PB1: light sensor enable
-    // PB3: the green LED on the breakout board. It indicates if lights should be on or not
+    // PA0 / A0: light sensor read
+    // PB1 / 9: light sensor enable
+    // PB5 / 13: the green LED on the breakout board. It indicates if lights should be on or not
     // PD2: the red LED that shows the board is working by flashing 5 times
     // PD3: the safety light ON/OFF switch
-    DDRB |= (1 << PB3) | (1 << PB1);
+    DDRB |= (1 << PB4) | (1 << PB1) | (1 << PB5);
     DDRD |= (1 << PD2) | (1 << PD3);
 
     turn_lights_off();
+//    flash_led_fuss();
     flash_led();
 
     sei();
@@ -140,7 +157,6 @@ int main(void)
         if (l > LIGHT_THRESHOLD && are_lights_on())
         {
             turn_lights_off();
-            cbi(PORTD, 3);
         }
         if (l < LIGHT_THRESHOLD && !are_lights_on())
         {
@@ -148,28 +164,28 @@ int main(void)
         }
         if (!are_lights_on())
         {
-            for(i = 0; i < 10; i++)
+            //for(i = 0; i < 10; i++)
                _delay_ms(100);
             continue;
         }
         for(i = 0; i < 2; i++)
         {
-            sbi(PORTD, 3);
+            sbi(PORTD, 4);
             _delay_ms(100);
-            cbi(PORTD, 3);
+            cbi(PORTD, 4);
             _delay_ms(100);
 
             for(j = 0; j < 3; j++)
             {
-                sbi(PORTD, 3);
+                sbi(PORTD, 4);
                 _delay_ms(40);
-                cbi(PORTD, 3);
+                cbi(PORTD, 4);
                 _delay_ms(40);
             }
 
-            sbi(PORTD, 3);
+            sbi(PORTD, 4);
             _delay_ms(100);
-            cbi(PORTD, 3);
+            cbi(PORTD, 4);
             _delay_ms(100);
         }
     }
