@@ -145,6 +145,10 @@ float swing_phase(float t)
     float phase = (t - peak_time[0]) / period_ball;
     if (last_peak_side != start_peak_side)
         phase += 0.5;
+    
+    // add a static offset to make up for the lag, 0.1s?
+    
+    // return fractional part of phase;
     return phase;
 }
 
@@ -191,6 +195,13 @@ uint8_t is_idle(vector *a, vector *da, float t)
     return 0;
 }
 
+float integral_ay(vector *a, vector *da, float t)
+{
+    static float accum = 0.0, accum_reg = 0.0;
+    accum = lowpass(accum_reg, 2, accum + a->y);
+    return accum;
+}
+
 uint8_t is_pullup(vector *a, vector *da, float t)
 {
     // Ball periods range between 1.45 and 2.5 seconds. Z is half that.
@@ -199,7 +210,7 @@ uint8_t is_pullup(vector *a, vector *da, float t)
     
     static float first_positive_time = 0.0;
     
-    if (a->y > -0.35)
+    if (integral_ay(a, da, t) < 0.2)
     {
         first_positive_time = 0.0;
         return 0;
