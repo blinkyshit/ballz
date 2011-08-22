@@ -113,7 +113,6 @@ uint8_t are_lights_on(void)
 
 void turn_lights_on(void)
 {
-    dprintf("light ON!\n");
     sbi(PORTB, 5);
     cbi(PORTB, 4);
     light_state = 1;
@@ -121,7 +120,6 @@ void turn_lights_on(void)
 
 void turn_lights_off(void)
 {
-    dprintf("light OFF!\n");
     cbi(PORTB, 5);
     sbi(PORTB, 4);
     light_state = 0;
@@ -137,7 +135,10 @@ int main(void)
     adc_setup();
     timer_setup();
 
-    // PA0 / A0: light sensor read
+    // 12V in: 
+    // Green: Ground
+    // Blue: 3.3V
+    // PA0 / A0: light sensor read (Orange)
     // PB1 / 9: light sensor enable
     // PB5 / 13: the green LED on the breakout board. It indicates if lights should be on or not
     // PD2: the red LED that shows the board is working by flashing 5 times
@@ -146,7 +147,6 @@ int main(void)
     DDRD |= (1 << PD2) | (1 << PD3);
 
     turn_lights_off();
-//    flash_led_fuss();
     flash_led();
 
     sei();

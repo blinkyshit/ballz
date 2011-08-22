@@ -27,9 +27,9 @@
 // Each ADC step = this many volts
 #define ADC_SENS .0025
 
-#define X_OFFSET 627.0
-#define Y_OFFSET 660.0
-#define Z_OFFSET 535.0
+#define X_OFFSET 608.0
+#define Y_OFFSET 644.0
+#define Z_OFFSET 531.0
 
 /* Accelerometer info: MMA7331L
 
@@ -112,7 +112,7 @@ void get_accel(vector *a, vector *da, float *t)
     last_tick = temp;
  
     *t = (float)temp * .002048;
-
+    //dprintf("%d %d %d\n", (uint16_t)a->x, (uint16_t)a->y, (uint16_t)a->z);
     a->x = ((float)a->x - X_OFFSET) * ADC_SENS / SENSITIVITY;
     a->y = ((float)a->y - Y_OFFSET) * ADC_SENS / SENSITIVITY;
     a->z = ((float)a->z - Z_OFFSET) * ADC_SENS / SENSITIVITY;
@@ -290,21 +290,37 @@ void blue_leds(uint8_t state)
     }
 }
 
-uint8_t EEMEM _ee_period;
-uint8_t get_period(void)
+uint16_t EEMEM _ee_period;
+float          _period;
+float get_period(void)
 {
-//    uint8_t _period = 0.0;
-//    if (_period != 0.0)
-//        return _period; 
+    uint16_t temp;
 
-    return eeprom_read_byte(&_ee_period);
+    if (_period != 0.0)
+        return _period; 
+
+    // Storing float values in EEPROM seems sketchy since
+    // the default data in EEPROM maps to nan float values.
+    // Lets use uint16_t instead!
+    temp = eeprom_read_word(&_ee_period);
+    if (temp == 0xFFFF)
+        _period = 0.0;
+    else
+        _period = (float)temp / 1000.0;
+
+    return _period;
 }
 
-void set_period(uint8_t t)
+void set_period(float t)
 {
-    eeprom_update_byte(&_ee_period, t);
+    uint16_t temp;
+
+    _period = t;
+    temp = (uint16_t)(t * 1000.0);
+    eeprom_update_word(&_ee_period, temp);
 }
- 
+
+// Fix fuse bit: avrdude -p m324a -P usb -c avrispmkII -U hfuse:w:0xD1:m
 int main(void)
 {
     serial_init();
@@ -318,9 +334,6 @@ int main(void)
 
     flash_led();
     dprintf("look at my ballz!\n");
-
-    //set_period(45);
-    //dprintf("period: %d\n", get_period());
 
     sei();
     fsm_loop();
