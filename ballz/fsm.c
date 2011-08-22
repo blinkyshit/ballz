@@ -5,13 +5,6 @@
 #include "ballz.h"
 #include "fsm.h"
 
-#define STATE_START              0
-#define STATE_ZERO_POINT         1
-#define STATE_PERIOD_FINDER      2
-#define STATE_IDLE               3
-#define STATE_PULL_UP            4
-#define STATE_SWINGING           5
-
 enum BallState
 {
     BALL_AT_REST                  = 0,
@@ -22,41 +15,9 @@ enum BallState
     BALL_PLAYA_BADGER
 };
 
-#define TRANSITION_NO_CHANGE     0
-#define TRANSITION_ZERO_POINT    1
-#define TRANSITION_PERIOD_FINDER 2
-#define TRANSITION_IDLE          3
-#define TRANSITION_PULL_UP       4
-#define TRANSITION_SWINGING      5
-
-typedef struct 
-{
-    uint8_t old_state;
-    uint8_t transition;
-    uint8_t new_state;
-} Transition;
-
-#define NUM_TRANSITIONS 8
-Transition transition_table[NUM_TRANSITIONS] = 
-{
-    { STATE_ZERO_POINT,            TRANSITION_PERIOD_FINDER,  STATE_PERIOD_FINDER         },
-    { STATE_PERIOD_FINDER,         TRANSITION_SWINGING,       STATE_IDLE              },
-//    { STATE_PERIOD_FINDER,         TRANSITION_SWINGING,       STATE_SWINGING              },
-    { STATE_SWINGING,              TRANSITION_IDLE,           STATE_IDLE                  },
-    { STATE_SWINGING,              TRANSITION_PULL_UP,        STATE_PULL_UP               },
-    { STATE_IDLE,                  TRANSITION_ZERO_POINT,     STATE_ZERO_POINT            },
-    { STATE_IDLE,                  TRANSITION_PULL_UP,        STATE_PULL_UP               },
-    { STATE_PULL_UP,               TRANSITION_IDLE    ,       STATE_IDLE                  },
-    { STATE_PULL_UP,               TRANSITION_SWINGING,       STATE_SWINGING              }
-};
-
 // The lowpass filter constants for our main data stream and for our DC offset removal
 #define LOWPASS_K           3
 #define LOWPASS_DC_FILTER_K 6
-
-// TODO: Document me
-#define PULL_UP_THRESHOLD_Y .2
-#define PULL_UP_THRESHOLD_T .5
 
 int sign(float val)
 {
@@ -136,7 +97,7 @@ unsigned char   period_data_valid;
 void process_data_period_finder(uint8_t state, __unused vector *a, __unused vector *da, __unused float t)
 {
     static unsigned char last_peak_counter = 0;
-    int i, counter;
+    int i;
     float deviation = 0.0;
     static float period_reg = 0.0;
 
@@ -187,153 +148,24 @@ float swing_phase(float t)
     return phase;
 }
 
-static float   t_last_zero_cross = 0.0;
-static uint8_t moveToPullUp = 0;
-static uint8_t moveToIdle = 0;
-static uint8_t moveToSwinging = 0;
-void process_data_idle(uint8_t state, vector *a, vector *da, float t)
+void state_zero_point(uint8_t prev_state, float t)
 {
-    static float last_dy = 0.0;
-
-    if ((a->y > 0.0 && a->y - da->y <= 0.0) || (a->y < 0.0 && a->y - da->y >= 0.0))
-        t_last_zero_cross = t;
-
-    if (t - t_last_zero_cross > PULL_UP_THRESHOLD_T && fabs(a->y) > PULL_UP_THRESHOLD_Y)
-        moveToPullUp = 1;
-
-    last_dy = da->y;
 }
 
-// If the absolute value of the derivative of the Z axis
-// goes above this threshold, we will consider the user to have let go of the ball.
-#define SWING_START_DERIV_THRESHOLD_Z .005
-void process_data_pull_up(uint8_t state, vector *a, vector *da, float t)
+void state_period_finder(uint8_t prev_state, float t)
 {
-    // If we're seeing zero crossings, then the ball is near idle again
-    // if (t - t_last_zero_cross < PULL_UP_THRESHOLD_T)
-    //    moveToIdle = 1;
-
-    if (0) //state == STATE_PULL_UP)
-    {
-        if (t - t_last_zero_cross > PULL_UP_THRESHOLD_T && fabs(a->y) > .2)
-        {
-            red_leds(1);
-            green_leds(0);
-            blue_leds(0);
-        }
-        if (t - t_last_zero_cross > 1.0 && fabs(a->y) > .4)
-        {
-            red_leds(0);
-            green_leds(1);
-            blue_leds(0);
-        }
-        if (fabs(da->z) > SWING_START_DERIV_THRESHOLD_Z)
-        {
-            moveToSwinging = 1;
-            start_peak_side = sign(a->y);
-        }
-    }
 }
 
-void process_data_swinging(uint8_t state, vector *a, vector *da, float t)
+void state_idle(uint8_t prev_state, float t)
 {
-    static float idle_check_reg = 100.0;
-    float        idle_check;
-    static int   counter = 0;
-
-    if (state != STATE_SWINGING)
-    {
-        idle_check_reg = 100.0;
-        return;
-    }
-
-    idle_check = lowpass(&idle_check_reg, 10, a->z * a->z);
-    if (idle_check < .0001)
-        moveToIdle = 1;
-
-    ++counter;
-    if ((counter & 0x3f) == 0 || moveToIdle)
-        dprintf("%f %f\n", t, idle_check);
 }
 
-uint8_t state_zero_point(uint8_t prev_state, float t)
+void state_pull_up(uint8_t prev_state, float t)
 {
-    return TRANSITION_PERIOD_FINDER;
 }
 
-uint8_t state_period_finder(uint8_t prev_state, float t)
+void state_swinging(uint8_t prev_state, float t)
 {
-    return TRANSITION_SWINGING;
-}
-
-uint8_t state_idle(uint8_t prev_state, float t)
-{
-    if (prev_state != STATE_IDLE)
-    {
-        dprintf("State: idle\n");
-        // Turn on only the blue LED
-        red_leds(0);
-        green_leds(0);
-        blue_leds(1);
-    }
-    if (moveToPullUp)
-    {
-        moveToPullUp = 0;
-        return TRANSITION_PULL_UP;
-    }
-
-    return TRANSITION_NO_CHANGE;
-}
-
-uint8_t state_pull_up(uint8_t prev_state, float t)
-{
-    if (prev_state != STATE_PULL_UP)
-    {
-        dprintf("State: pull up\n");
-        // Turn on only the red LED to start
-        red_leds(1);
-        green_leds(0);
-        blue_leds(0);
-    }
-
-    if (moveToIdle)
-    {
-        // Turn off blue LED and move to pull up
-        moveToIdle = 0;
-        return TRANSITION_IDLE;
-    }
-    if (moveToSwinging)
-    {
-        // Turn off blue LED and move to pull up
-        moveToSwinging = 0;
-        return TRANSITION_SWINGING;
-    }
-
-    return TRANSITION_NO_CHANGE;
-}
-
-uint8_t state_swinging(uint8_t prev_state, float t)
-{
-    if (prev_state != STATE_SWINGING)
-    {
-        dprintf("State: swinging\n");
-        red_leds(1);
-        green_leds(0);
-        blue_leds(1);
-    }
-
-    if (moveToIdle)
-    {
-        moveToIdle = 0;
-        return TRANSITION_IDLE;
-    }
-    if (moveToPullUp)
-    {
-        moveToPullUp = 0;
-        return TRANSITION_PULL_UP;
-    }
-
-    return TRANSITION_NO_CHANGE;
 }
 
 #define ZERO_CROSSING_COUNTS 20
@@ -433,23 +265,11 @@ void fsm_loop(void)
     vector  a, da, a_dc, a_no_dc;
     vector  a_lp_reg = {0, 0, 0}, da_lp_reg = {0, 0, 0}, a_dc_reg = {0, 0, 0};
     float   t;
-    uint8_t state = STATE_ZERO_POINT;
-    uint8_t prev_state = STATE_START, trans = TRANSITION_NO_CHANGE, i;
     enum BallState current_ball_state = -1, previous_ball_state;
-//    uint32_t samples = 0, done = 0;
-
-//    t_last_zero_cross = 0.0;
 
     while(1)
     {
         get_accel(&a, &da, &t);
-
-//        samples++;
-//        if (t > 30 && !done)
-//        {
-//            done = 1;
-//            dprintf("Samples: %d\n", samples);
-//        }
 
 //        dprintf("%f %f %f\n", t, a.z, da.z);
 
@@ -471,10 +291,7 @@ void fsm_loop(void)
 
         process_data_peaks(current_ball_state, &a_no_dc, &da, t);
         process_data_zero_point(current_ball_state, &a, &da, t);
-        process_data_period_finder(state, &a_no_dc, &da, t);
-        process_data_idle(state, &a, &da, t);
-        process_data_pull_up(state, &a, &da, t);
-        process_data_swinging(state, &a_no_dc, &da, t);
+        process_data_period_finder(current_ball_state, &a_no_dc, &da, t);
 
         current_ball_state = infer_behavior(&a, &da, t);
 
@@ -510,42 +327,5 @@ void fsm_loop(void)
             }
 
         previous_ball_state = current_ball_state;
-#if 0
-        switch(state)
-        {
-            case STATE_ZERO_POINT:
-                trans = state_zero_point(prev_state, t);
-                break;
-
-            case STATE_PERIOD_FINDER:
-                trans = state_period_finder(prev_state, t);
-                break;
-
-            case STATE_IDLE:
-                trans = state_idle(prev_state, t);
-                break;
-
-            case STATE_PULL_UP:
-                trans = state_pull_up(prev_state, t);
-                break;
-
-            case STATE_SWINGING:
-                trans = state_swinging(prev_state, t);
-                break;
-        }
-
-        prev_state = state;
-        if (trans == TRANSITION_NO_CHANGE)
-            continue;
-
-        for(i = 0; i < NUM_TRANSITIONS; i++)
-        {
-            if (transition_table[i].old_state == state && transition_table[i].transition == trans)
-            {
-                state = transition_table[i].new_state;
-                break;
-            }
-        }
-#endif
     }
 }
