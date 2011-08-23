@@ -17,6 +17,7 @@
 #define PWM_COUNT 24
 volatile uint8_t pwm_index = 0;
 volatile uint8_t pwm[PWM_COUNT];
+uint8_t led_last_state[PWM_COUNT];
 
 void set_led(uint8_t led, uint8_t state);
 
@@ -50,6 +51,11 @@ void timer_setup(void)
 
 void set_led(uint8_t led, uint8_t state)
 {
+    if (led_last_state[led] == state)
+        return;
+
+    led_last_state[led] = state;
+
     // led 0
     if (led == 0)
     {
