@@ -8,37 +8,75 @@
 
 #include "debug.h"
 
+#define USE_TIMER
+
 // Bit manipulation macros
 #define sbi(a, b) ((a) |= 1 << (b))       //sets bit B in variable A
 #define cbi(a, b) ((a) &= ~(1 << (b)))    //clears bit B in variable A
 #define tbi(a, b) ((a) ^= 1 << (b))       //toggles bit B in variable A
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
+//#define bit(a,b) ((&(a)[b>>3]) & 1 << (b & 0x7))
+#define bit(a,b) ((a) & 1 << (b & 0x7))
 
 #define PWM_COUNT 24
 volatile uint8_t pwm_index = 0;
 volatile uint8_t pwm[PWM_COUNT];
-uint8_t led_last_state[PWM_COUNT];
+volatile uint8_t led_last_state[PWM_COUNT];
 
 void set_led(uint8_t led, uint8_t state);
 
+void _manual_isr(void);
+
 ISR (TIMER2_OVF_vect)
 {
+    _manual_isr();
+}
+
+// [0] = red, [1] = green, [2] = blue, all full power. [4] = red 254/255 power, etc. Each bit is one LED.
+uint8_t led_power_map[768];
+
+void _manual_isr(void) {
+    static uint16_t counter = 0;
     uint8_t i;
 
-    // See which LEDs need to be turned on
-    for(i = 0; i < PWM_COUNT; i++)
-    {
-        if (pwm_index >= pwm[i])
-            set_led(i, 1); 
-    }
+    if (led_power_map[counter])
+        for (i=0; i<8; i++)
+            if (bit(led_power_map[counter], i))
+                set_led(i*3 + 0, 1);
+    counter++;
+    if (led_power_map[counter])
+        for (i=0; i<8; i++)
+            if (bit(led_power_map[counter], i))
+                set_led(i*3 + 1, 1);
+    counter++;
+    if (led_power_map[counter])
+        for (i=0; i<8; i++)
+            if (bit(led_power_map[counter], i))
+                set_led(i*3 + 2, 1);
+    counter++;
 
-    pwm_index++;
-    // The timer roller over, turn off all LEDs
-    if (!pwm_index)
+    // The timer rolled over, turn off all LEDs
+    if (counter == 765)
     {
-        for(i = 0; i < PWM_COUNT; i++)
-           set_led(i, 0); 
+        counter = 0;
+#if 1
+        for(i = 0; i < 8; i++)
+           set_led(i*3, bit(led_power_map[0], i));
+        for(i = 0; i < 8; i++)
+           set_led(i*3 + 1, bit(led_power_map[1], i));
+        for(i = 0; i < 8; i++)
+           set_led(i*3 + 2, bit(led_power_map[2], i));
+#else
+        for (i=0; i<PWM_COUNT; i++)
+            set_led(i, 0);
+#endif
     }
+}   
+
+void manual_isr(void) {
+    int i;
+    for (i=0; i<256; i++)
+        _manual_isr();
 }
 
 void timer_setup(void)
@@ -49,223 +87,62 @@ void timer_setup(void)
     TIMSK2 |= _BV(TOIE2);
 }
 
+// PORTA = 1, PORTB = 2, PORTC = 3, PORTD = 4
+static const uint8_t port[PWM_COUNT] =
+    {3, 1, 1, 3, 3, 3, 3, 3, 3, 4, 4, 3, 4, 4, 4, 2, 2, 4, 2, 2, 2, 2, 2, 2};
+static const uint8_t line[PWM_COUNT] =
+    {7, 7, 6, 4, 5, 6, 1, 2, 3, 6, 7, 0, 3, 4, 5, 6, 7, 2, 3, 4, 5, 0, 1, 2};
+
 void set_led(uint8_t led, uint8_t state)
 {
+    if (led >= PWM_COUNT)
+        return;
+
+    // ensure state is either 0 or 1
+    state = !!state;
+    
     if (led_last_state[led] == state)
         return;
 
     led_last_state[led] = state;
 
-    // led 0
-    if (led == 0)
+    switch(port[led] + 4*state)
     {
-        if (state)
-            cbi(PORTC, 7);
-        else
-            sbi(PORTC, 7);
-    }
-    else
-    if (led == 1)
-    {
-        if (state)
-            cbi(PORTA, 7);
-        else
-            sbi(PORTA, 7);
-    }
-    else
-    if (led == 2)
-    {
-        if (state)
-            cbi(PORTA, 6);
-        else
-            sbi(PORTA, 6);
-    }
-    // led 1
-    else
-    if (led == 3)
-    {
-        if (state)
-            cbi(PORTC, 4);
-        else
-            sbi(PORTC, 4);
-    }
-    else
-    if (led == 4)
-    {
-        if (state)
-            cbi(PORTC, 5);
-        else
-            sbi(PORTC, 5);
-    }
-    else
-    if (led == 5)
-    {
-        if (state)
-            cbi(PORTC, 6);
-        else
-            sbi(PORTC, 6);
-    }
-    else
-    // led 2
-    if (led == 6)
-    {
-        if (state)
-            cbi(PORTC, 1);
-        else
-            sbi(PORTC, 1);
-    }
-    else
-    if (led == 7)
-    {
-        if (state)
-            cbi(PORTC, 2);
-        else
-            sbi(PORTC, 2);
-    }
-    else
-    if (led == 8)
-    {
-        if (state)
-            cbi(PORTC, 3);
-        else
-            sbi(PORTC, 3);
-    }
-    else
-    // led 3
-    if (led == 9)
-    {
-        if (state)
-            cbi(PORTD, 6);
-        else
-            sbi(PORTD, 6);
-    }
-    else
-    if (led == 10)
-    {
-        if (state)
-            cbi(PORTD, 7);
-        else
-            sbi(PORTD, 7);
-    }
-    else
-    if (led == 11)
-    {
-        if (state)
-            cbi(PORTC, 0);
-        else
-            sbi(PORTC, 0);
-    }
-    else
-    // led 4
-    if (led == 12)
-    {
-        if (state)
-            cbi(PORTD, 3);
-        else
-            sbi(PORTD, 3);
-    }
-    else
-    if (led == 13)
-    {
-        if (state)
-            cbi(PORTD, 4);
-        else
-            sbi(PORTD, 4);
-    }
-    else
-    if (led == 14)
-    {
-        if (state)
-            cbi(PORTD, 5);
-        else
-            sbi(PORTD, 5);
-    }
-    // led 5
-    else
-    if (led == 15)
-    {
-        if (state)
-            cbi(PORTB, 6);
-        else
-            sbi(PORTB, 6);
-    }
-    else
-    if (led == 16)
-    {
-        if (state)
-            cbi(PORTB, 7);
-        else
-            sbi(PORTB, 7);
-    }
-    else
-    if (led == 17)
-    {
-        if (state)
-            cbi(PORTD, 2);
-        else
-            sbi(PORTD, 2);
-    }
-    else
-    // led 6
-    if (led == 18)
-    {
-        if (state)
-            cbi(PORTB, 3);
-        else
-            sbi(PORTB, 3);
-    }
-    else
-    if (led == 19)
-    {
-        if (state)
-            cbi(PORTB, 4);
-        else
-            sbi(PORTB, 4);
-    }
-    else
-    if (led == 20)
-    {
-        if (state)
-            cbi(PORTB, 5);
-        else
-            sbi(PORTB, 5);
-    }
-    else
-    // led 7
-    if (led == 21)
-    {
-        if (state)
-            cbi(PORTB, 0);
-        else
-            sbi(PORTB, 0);
-    }
-    else
-    if (led == 22)
-    {
-        if (state)
-            cbi(PORTB, 1);
-        else
-            sbi(PORTB, 1);
-    }
-    else
-    if (led == 23)
-    {
-        if (state)
-            cbi(PORTB, 2);
-        else
-            sbi(PORTB, 2);
+        case 1: sbi(PORTA, line[led]); break;
+        case 2: sbi(PORTB, line[led]); break;
+        case 3: sbi(PORTC, line[led]); break;
+        case 4: sbi(PORTD, line[led]); break;
+        case 5: cbi(PORTA, line[led]); break;
+        case 6: cbi(PORTB, line[led]); break;
+        case 7: cbi(PORTC, line[led]); break;
+        case 8: cbi(PORTD, line[led]); break;
     }
 }
 
 void set_color(uint8_t tled, uint8_t red, uint8_t green, uint8_t blue)
 {
-    tled *= 3;
+    static uint8_t last_duty[24] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 
-    cli();
-    pwm[tled] = 255 - red;
-    pwm[tled+1] = 255 - green;
-    pwm[tled+2] = 255 - blue;
-    sei();
+    if (tled >= 8)
+        return;
+
+    uint8_t led_mask = 1 << tled;
+
+    red = ~red;
+    green = ~green;
+    blue = ~blue;
+    
+    led_power_map[last_duty[tled*3] * 3] &= ~led_mask;
+    led_power_map[last_duty[tled*3 + 1] * 3 + 1] &= ~led_mask;
+    led_power_map[last_duty[tled*3 + 2] * 3 + 2] &= ~led_mask;
+
+    led_power_map[red * 3   + 0] |= led_mask;
+    led_power_map[green * 3 + 1] |= led_mask;
+    led_power_map[blue * 3  + 2] |= led_mask;
+    
+    last_duty[tled*3 + 0] = red;
+    last_duty[tled*3 + 1] = green;
+    last_duty[tled*3 + 2] = blue;
 }
 
 void flash_led(void)
@@ -281,12 +158,29 @@ void flash_led(void)
     }
 }
 
+void delay(uint8_t x) {
+#ifdef USE_TIMER
+    _delay_ms(x);
+#else
+    while (x--)
+        manual_isr();
+#endif
+}
+
 int main(void)
 {
-    uint8_t i, j;
+    uint16_t i, j, loop;
+
+    for (i=0; i<PWM_COUNT; i++)
+        led_last_state[i] = 2;
+    for (i=0; i<768; i++)
+        led_power_map[i] = 0;
 
     serial_init();
-    //timer_setup();
+
+#ifdef USE_TIMER
+    timer_setup();
+#endif
 
     DDRA |= (1 << PA6) | (1 << PA7);
     DDRB = 0xFF;
@@ -295,10 +189,10 @@ int main(void)
 
     sei();
 
-    for(j = 0; j < 24; j++)
+    for(j = 0; j < 8; j++)
         set_color(j, 0, 0, 0);
 
-    while(1)
+    while(0)
     {
         for(j = 0; j < 24; j++)
             set_led(j, 1);
@@ -307,14 +201,34 @@ int main(void)
             set_led(j, 0);
         _delay_ms(100);
     }
-    while(0)
+
+    if (1)
     {
-        for(j = 0; j < 24; j++)
-            set_color(j, 0, 0, 0);
-        _delay_ms(100);
-        for(j = 0; j < 24; j++)
+        for(j = 0; j < 8; j++)
+            set_color(j, 255, 0, 0);
+        delay(250);
+        for(j = 0; j < 8; j++)
+            set_color(j, 0, 255, 0);
+        delay(250);
+        for(j = 0; j < 8; j++)
+            set_color(j, 0, 0, 255);
+        delay(250);
+        for(j = 0; j < 8; j++)
+            set_color(j, 255, 0, 255);
+        delay(250);
+        for(j = 0; j < 8; j++)
+            set_color(j, 0, 255, 255);
+        delay(250);
+        for(j = 0; j < 8; j++)
+            set_color(j, 255, 255, 0);
+        delay(250);
+        for(j = 0; j < 8; j++)
             set_color(j, 255, 255, 255);
-        _delay_ms(100);
+        delay(250);
+        for(j = 0; j < 8; j++)
+            set_color(j, 0, 0, 0);
+        delay(250);
+        delay(250);
     }
 
     while(0)
@@ -325,25 +239,25 @@ int main(void)
         _delay_ms(100);
     }
 
-    while(1)
+    if (1)
     {
         for(i = 0; i < 255; i++)
         {
-            for(j = 0; j < 24; j += 3)
+            for(j = 0; j < 8; j++)
                 set_color(j, i, 0, 0);
-            _delay_ms(10);
+            delay(10);
         }
         for(i = 0; i < 255; i++)
         {
-            for(j = 0; j < 24; j += 3)
-                set_color(j + 1, 255, i, 0);
-            _delay_ms(10);
+            for(j = 0; j < 8; j++)
+                set_color(j, 255, 0, i);
+            delay(10);
         }
         for(i = 0; i < 255; i++)
         {
-            for(j = 0; j < 24; j += 3)
-                set_color(j + 2, 255, 255, i);
-            _delay_ms(10);
+            for(j = 0; j < 8; j++)
+                set_color(j, 255, i, 255);
+            delay(10);
         }
     }
 
@@ -363,6 +277,11 @@ int main(void)
         sbi(PORTD, 7);
         _delay_ms(100); 
     }
+
+    for(j = 0; j < 8; j++)
+        set_color(i, 0, 0, 0);
+
+    delay(255);
 
 	return 0;
 }
