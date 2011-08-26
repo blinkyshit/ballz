@@ -190,7 +190,8 @@ int main(void)
     sei();
 
     for(j = 0; j < 8; j++)
-        set_color(j, 0, 0, 0);
+        set_color(j, 255, 255, 255);
+    for(;;);
 
     while(0)
     {

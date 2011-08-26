@@ -111,6 +111,7 @@ void turn_ballz_on(void)
 {
     sbi(PORTB, 5);
     cbi(PORTB, 4);
+    cbi(PORTD, 6);
     light_state = 1;
 }
 
@@ -118,6 +119,7 @@ void turn_ballz_off(void)
 {
     cbi(PORTB, 5);
     sbi(PORTB, 4);
+    sbi(PORTD, 6);
     light_state = 0;
 }
 
@@ -142,9 +144,9 @@ int main(void)
     // PB1 / 9: light sensor enable
     // PB5 / 13: the green LED on the breakout board. It indicates if ballz should be on or not
     // PD2: the red LED that shows the board is working by flashing 5 times
-    // PD3: the orange safety light ON/OFF switch
+    // PD6: the orange safety light ON/OFF switch
     DDRB |= (1 << PB4) | (1 << PB1) | (1 << PB5);
-    DDRD |= (1 << PD2) | (1 << PD3);
+    DDRD |= (1 << PD6) | (1 << PD2) | (1 << PD3);
 
     dprintf("I am the master! Where are my minions?\n");
     turn_ballz_off();
@@ -158,10 +160,12 @@ int main(void)
         l = get_light_level();
         if (l > LIGHT_THRESHOLD && are_lights_on())
         {
+            dprintf("lights off!\n");
             turn_ballz_off();
         }
         if (l < LIGHT_THRESHOLD && !are_lights_on())
         {
+            dprintf("light on!\n");
             turn_ballz_on();
         }
         if (!are_lights_on())
@@ -188,7 +192,7 @@ int main(void)
             //dprintf("%f: Ballz on!\n", t);
             ball_restart_time = 0.0;
         }
-
+#if 0
         for(i = 0; i < 2; i++)
         {
             sbi(PORTD, 4);
@@ -209,6 +213,7 @@ int main(void)
             cbi(PORTD, 4);
             _delay_ms(100);
         }
+#endif
     }
 
 	return 0;
