@@ -6,10 +6,12 @@
 #include <avr/pgmspace.h>
 #include <util/delay.h>
 #include <avr/eeprom.h>
+#include <avr/wdt.h>
 
 #include "debug.h"
 #include "ballz.h"
-#include "fsm.h"
+#include "animations.h"
+#include "pwm.h"
 
 
 #define ADC_START         0  
@@ -63,10 +65,6 @@ volatile uint32_t ticks = 0;
 ISR (TIMER0_OVF_vect)
 {
     ticks++;
-}
-
-ISR (TIMER2_OVF_vect)
-{
 }
 
 // How often we read ADC values, measured in ticks
@@ -154,7 +152,7 @@ uint8_t adc_read(uint8_t ch)
     return ADCH;
 }
 
-void timer_setup(void)
+void ballz_timer_setup(void)
 {
     // Unused for now
     //TCCR2B |= _BV(CS21); // | _BV(CS21);// | _BV(CS20);
@@ -176,8 +174,10 @@ void flash_led(void)
 {
     uint8_t i, j;
 
-    for(j = 0; j < 5; j++)
+    for(j = 0; j < 2; j++)
     {
+        wdt_reset();
+
         cbi(PORTA, 6);
         cbi(PORTA, 7);
         for(i = 0; i < 8; i++)
@@ -192,7 +192,7 @@ void flash_led(void)
         cbi(PORTD, 5);
         cbi(PORTD, 6);
         cbi(PORTD, 7);
-        _delay_ms(75); 
+        _delay_ms(25); 
 
         sbi(PORTA, 6);
         sbi(PORTA, 7);
@@ -208,7 +208,7 @@ void flash_led(void)
         sbi(PORTD, 5);
         sbi(PORTD, 6);
         sbi(PORTD, 7);
-        _delay_ms(75); 
+        _delay_ms(25); 
     }
 }
 
@@ -353,12 +353,16 @@ void set_offsets(uint16_t x, uint16_t y, uint16_t z)
     eeprom_update_word(&_ee_z_offset, z);
 }
 
-// Fix fuse bit: avrdude -p m324a -P usb -c avrispmkII -U hfuse:w:0xD1:m
+// Fix fuse bit: avrdude -p m324a -P usb -c avrispmkII -U hfuse:w:0xC1:m
 int main(void)
 {
+    wdt_enable(WDTO_500MS);
+    wdt_reset();
+
     serial_init();
     adc_setup();
-    timer_setup();
+    ballz_timer_setup();
+    pwm_timer_setup();
 
     DDRA |= (1 << PA6) | (1 << PA7);
     DDRB = 0xFF;
@@ -367,9 +371,10 @@ int main(void)
 
     flash_led();
     dprintf("look at my ballz!\n");
+    wdt_reset();
 
     sei();
-    fsm_loop();
+    rainbow_circle();
 #if 0
     while(1)
     {

@@ -9,8 +9,8 @@ program: $(TARGET).hex
 $(TARGET).hex: $(TARGET).obj
 	$(OBJ2HEX) -R .eeprom -O ihex $< $@
 
-$(TARGET).obj: $(TARGET).o debug.o fsm.o
-	$(CC) -Wl,-u,vfprintf -lprintf_flt -lc -lm $(CFLAGS) -o $@ -Wl,-Map,$(TARGET).map $(TARGET).o debug.o fsm.o -lc
+$(TARGET).obj: $(TARGET).o debug.o pwm.o hue.o animations.o
+	$(CC) -Wl,-u,vfprintf -lprintf_flt -lc -lm $(CFLAGS) -o $@ -Wl,-Map,$(TARGET).map $(TARGET).o debug.o hue.o pwm.o animations.o -lc
 #k$(CC) $(CFLAGS) -o $@ -Wl,-Map,$(TARGET).map $(TARGET).o debug.o
 
 clean:
